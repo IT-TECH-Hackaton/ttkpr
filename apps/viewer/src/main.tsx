@@ -7,7 +7,8 @@ import { router } from "./router";
 import "./styles.css";
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 60_000, retry: 1 } },
+  // "always": offline, queries still run and are answered from saved copies.
+  defaultOptions: { queries: { staleTime: 60_000, retry: 1, networkMode: "always" } },
 });
 
 const root = document.getElementById("root");

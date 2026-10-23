@@ -13,11 +13,54 @@ export const zAccessMode = z.enum([
 ]);
 
 /**
+ * AssetOut
+ */
+export const zAssetOut = z.object({
+    url: z.string(),
+    width: z.int(),
+    height: z.int()
+});
+
+/**
+ * Body_upload_asset
+ */
+export const zBodyUploadAsset = z.object({
+    file: z.string()
+});
+
+/**
+ * Body_upload_frame
+ */
+export const zBodyUploadFrame = z.object({
+    file: z.string(),
+    meta: z.string()
+});
+
+/**
+ * Body_upload_panorama
+ */
+export const zBodyUploadPanorama = z.object({
+    file: z.string(),
+    levelId: z.string(),
+    lon: z.number(),
+    lat: z.number(),
+    headingDeg: z.number().optional().default(0)
+});
+
+/**
  * Building
  */
 export const zBuilding = z.object({
     id: z.string(),
     name: z.string()
+});
+
+/**
+ * CaptureTokenOut
+ */
+export const zCaptureTokenOut = z.object({
+    token: z.string(),
+    expiresAt: z.int()
 });
 
 /**
@@ -46,6 +89,13 @@ export const zConnector = z.object({
     kind: zConnectorKind,
     name: z.string().nullish(),
     points: z.array(zConnectorPoint).min(2)
+});
+
+/**
+ * InviteAccept
+ */
+export const zInviteAccept = z.object({
+    token: z.string()
 });
 
 /**
@@ -84,6 +134,43 @@ export const zMapCreate = z.object({
 });
 
 /**
+ * MapUpdate
+ */
+export const zMapUpdate = z.object({
+    title: z.string().min(1).max(200).nullish(),
+    slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/).nullish(),
+    accessMode: zAccessMode.nullish()
+});
+
+/**
+ * MemberRole
+ *
+ * Role of a user on one map. What each role may do lives in api.permissions.
+ */
+export const zMemberRole = z.enum([
+    'owner',
+    'editor',
+    'photographer',
+    'viewer'
+]);
+
+/**
+ * InviteCreate
+ */
+export const zInviteCreate = z.object({
+    role: zMemberRole.optional().default('editor')
+});
+
+/**
+ * InviteOut
+ */
+export const zInviteOut = z.object({
+    token: z.string(),
+    role: zMemberRole,
+    expiresAt: z.int()
+});
+
+/**
  * MapSummary
  */
 export const zMapSummary = z.object({
@@ -91,7 +178,37 @@ export const zMapSummary = z.object({
     slug: z.string(),
     title: z.string(),
     accessMode: zAccessMode,
-    draftVersion: z.int()
+    draftVersion: z.int(),
+    publishedNumber: z.int().nullish(),
+    updatedAt: z.iso.datetime(),
+    role: zMemberRole.optional().default('viewer'),
+    permissions: z.array(z.string()).optional()
+});
+
+/**
+ * MemberAdd
+ */
+export const zMemberAdd = z.object({
+    email: z.email(),
+    role: zMemberRole.optional().default('editor')
+});
+
+/**
+ * MemberOut
+ */
+export const zMemberOut = z.object({
+    userId: z.uuid(),
+    name: z.string(),
+    email: z.string(),
+    role: zMemberRole,
+    isYou: z.boolean()
+});
+
+/**
+ * MemberUpdate
+ */
+export const zMemberUpdate = z.object({
+    role: zMemberRole
 });
 
 /**
@@ -156,6 +273,72 @@ export const zPano = z.object({
 });
 
 /**
+ * PanoramaCreate
+ */
+export const zPanoramaCreate = z.object({
+    levelId: z.string(),
+    position: z.tuple([z.number(), z.number()]),
+    headingDeg: z.number().nullish(),
+    title: z.string().max(200).nullish(),
+    fovDeg: z.number().gt(10).lt(170).nullish(),
+    frameCount: z.int().gte(1).lte(64),
+    device: z.string().max(300).nullish()
+});
+
+/**
+ * PanoramaStatus
+ */
+export const zPanoramaStatus = z.enum([
+    'uploading',
+    'processing',
+    'ready',
+    'failed'
+]);
+
+/**
+ * PanoramaOut
+ */
+export const zPanoramaOut = z.object({
+    id: z.uuid(),
+    mapId: z.uuid(),
+    levelId: z.string(),
+    position: z.tuple([z.number(), z.number()]),
+    headingDeg: z.number(),
+    cameraHeightM: z.number(),
+    title: z.string().nullable(),
+    source: z.string(),
+    status: zPanoramaStatus,
+    progress: z.int(),
+    error: z.string().nullable(),
+    frameCount: z.int(),
+    tiles: zPanoTiles.nullable(),
+    quality: z.record(z.string(), z.union([
+        z.number(),
+        z.int(),
+        z.string()
+    ]).nullable()).nullable(),
+    createdAt: z.iso.datetime()
+});
+
+/**
+ * PanoramaUpdate
+ */
+export const zPanoramaUpdate = z.object({
+    levelId: z.string().nullish(),
+    position: z.tuple([z.number(), z.number()]).nullish(),
+    headingDeg: z.number().nullish(),
+    title: z.string().max(200).nullish()
+});
+
+/**
+ * PasswordChange
+ */
+export const zPasswordChange = z.object({
+    currentPassword: z.string(),
+    newPassword: z.string().min(8).max(200)
+});
+
+/**
  * PathLine
  */
 export const zPathLine = z.object({
@@ -186,12 +369,47 @@ export const zPolygonGeometry = z.object({
 });
 
 /**
+ * ProfileUpdate
+ */
+export const zProfileUpdate = z.object({
+    name: z.string().min(1).max(200)
+});
+
+/**
+ * PublicManifest
+ */
+export const zPublicManifest = z.object({
+    slug: z.string(),
+    title: z.string(),
+    version: z.int(),
+    bundleUrl: z.string()
+});
+
+/**
  * RegisterRequest
  */
 export const zRegisterRequest = z.object({
     email: z.email(),
     name: z.string().min(1).max(200),
     password: z.string().min(8).max(200)
+});
+
+/**
+ * Underlay
+ *
+ * Raster plan placed under the drawing (uploaded image), per level.
+ */
+export const zUnderlay = z.object({
+    id: z.string(),
+    levelId: z.string(),
+    url: z.string(),
+    coordinates: z.tuple([
+        z.tuple([z.number(), z.number()]),
+        z.tuple([z.number(), z.number()]),
+        z.tuple([z.number(), z.number()]),
+        z.tuple([z.number(), z.number()])
+    ]),
+    opacity: z.number().gte(0).lte(1).optional().default(0.6)
 });
 
 /**
@@ -271,7 +489,8 @@ export const zMapDocument = z.object({
     connectors: z.array(zConnector).optional().default([]),
     pois: z.array(zPoi).optional().default([]),
     panos: z.array(zPano).optional().default([]),
-    paths: z.array(zPathLine).optional().default([])
+    paths: z.array(zPathLine).optional().default([]),
+    underlays: z.array(zUnderlay).optional().default([])
 });
 
 /**
@@ -305,7 +524,8 @@ export const zVersionStatus = z.enum([
 export const zPublishOut = z.object({
     versionId: z.uuid(),
     number: z.int(),
-    status: zVersionStatus
+    status: zVersionStatus,
+    slug: z.string()
 });
 
 /**
@@ -339,6 +559,25 @@ export const zLogoutResponse = z.void();
  */
 export const zMeResponse = zUserOut;
 
+export const zUpdateProfileBody = zProfileUpdate;
+
+/**
+ * Successful Response
+ */
+export const zUpdateProfileResponse = zUserOut;
+
+export const zChangePasswordBody = zPasswordChange;
+
+/**
+ * Successful Response
+ */
+export const zChangePasswordResponse = z.void();
+
+/**
+ * Successful Response
+ */
+export const zLogoutEverywhereResponse = z.void();
+
 /**
  * Response List Maps
  *
@@ -352,6 +591,35 @@ export const zCreateMapBody = zMapCreate;
  * Successful Response
  */
 export const zCreateMapResponse = zMapSummary;
+
+export const zDeleteMapPath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zDeleteMapResponse = z.void();
+
+export const zGetMapPath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zGetMapResponse = zMapSummary;
+
+export const zUpdateMapBody = zMapUpdate;
+
+export const zUpdateMapPath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zUpdateMapResponse = zMapSummary;
 
 export const zGetDraftPath = z.object({
     map_id: z.uuid()
@@ -381,3 +649,189 @@ export const zPublishPath = z.object({
  * Successful Response
  */
 export const zPublishResponse = zPublishOut;
+
+export const zUploadAssetBody = zBodyUploadAsset;
+
+export const zUploadAssetPath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zUploadAssetResponse = zAssetOut;
+
+export const zCreateCaptureTokenPath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zCreateCaptureTokenResponse = zCaptureTokenOut;
+
+export const zListMembersPath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Response List Members
+ *
+ * Successful Response
+ */
+export const zListMembersResponse = z.array(zMemberOut);
+
+export const zAddMemberBody = zMemberAdd;
+
+export const zAddMemberPath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zAddMemberResponse = zMemberOut;
+
+export const zRemoveMemberPath = z.object({
+    map_id: z.uuid(),
+    user_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zRemoveMemberResponse = z.void();
+
+export const zUpdateMemberBody = zMemberUpdate;
+
+export const zUpdateMemberPath = z.object({
+    map_id: z.uuid(),
+    user_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zUpdateMemberResponse = zMemberOut;
+
+export const zCreateInviteBody = zInviteCreate;
+
+export const zCreateInvitePath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zCreateInviteResponse = zInviteOut;
+
+export const zAcceptInviteBody = zInviteAccept;
+
+/**
+ * Successful Response
+ */
+export const zAcceptInviteResponse = zMapSummary;
+
+export const zListPanoramasPath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Response List Panoramas
+ *
+ * Successful Response
+ */
+export const zListPanoramasResponse = z.array(zPanoramaOut);
+
+export const zCreateCaptureBody = zPanoramaCreate;
+
+export const zCreateCapturePath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zCreateCaptureResponse = zPanoramaOut;
+
+export const zUploadFrameBody = zBodyUploadFrame;
+
+export const zUploadFramePath = z.object({
+    pano_id: z.uuid(),
+    index: z.int()
+});
+
+/**
+ * Successful Response
+ */
+export const zUploadFrameResponse = zPanoramaOut;
+
+export const zStartStitchingPath = z.object({
+    pano_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zStartStitchingResponse = zPanoramaOut;
+
+export const zUploadPanoramaBody = zBodyUploadPanorama;
+
+export const zUploadPanoramaPath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zUploadPanoramaResponse = zPanoramaOut;
+
+export const zDeletePanoramaPath = z.object({
+    pano_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zDeletePanoramaResponse = z.void();
+
+export const zGetPanoramaPath = z.object({
+    pano_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zGetPanoramaResponse = zPanoramaOut;
+
+export const zUpdatePanoramaBody = zPanoramaUpdate;
+
+export const zUpdatePanoramaPath = z.object({
+    pano_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zUpdatePanoramaResponse = zPanoramaOut;
+
+export const zGetManifestPath = z.object({
+    slug: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zGetManifestResponse = zPublicManifest;
+
+export const zGetBundlePath = z.object({
+    slug: z.string(),
+    number: z.int()
+});
+
+/**
+ * Response Get Bundle
+ *
+ * Successful Response
+ */
+export const zGetBundleResponse = z.record(z.string(), z.unknown());

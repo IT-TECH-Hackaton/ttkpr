@@ -10,6 +10,76 @@ export type ClientOptions = {
 export type AccessMode = 'public' | 'link' | 'password' | 'private';
 
 /**
+ * AssetOut
+ */
+export type AssetOut = {
+    /**
+     * Url
+     */
+    url: string;
+    /**
+     * Width
+     */
+    width: number;
+    /**
+     * Height
+     */
+    height: number;
+};
+
+/**
+ * Body_upload_asset
+ */
+export type BodyUploadAsset = {
+    /**
+     * File
+     */
+    file: Blob | File;
+};
+
+/**
+ * Body_upload_frame
+ */
+export type BodyUploadFrame = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Meta
+     *
+     * FrameMeta as JSON
+     */
+    meta: string;
+};
+
+/**
+ * Body_upload_panorama
+ */
+export type BodyUploadPanorama = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Levelid
+     */
+    levelId: string;
+    /**
+     * Lon
+     */
+    lon: number;
+    /**
+     * Lat
+     */
+    lat: number;
+    /**
+     * Headingdeg
+     */
+    headingDeg?: number;
+};
+
+/**
  * Building
  */
 export type Building = {
@@ -21,6 +91,22 @@ export type Building = {
      * Name
      */
     name: string;
+};
+
+/**
+ * CaptureTokenOut
+ */
+export type CaptureTokenOut = {
+    /**
+     * Token
+     */
+    token: string;
+    /**
+     * Expiresat
+     *
+     * Unix time
+     */
+    expiresAt: number;
 };
 
 /**
@@ -96,6 +182,38 @@ export type HttpValidationError = {
      * Detail
      */
     detail?: Array<ValidationError>;
+};
+
+/**
+ * InviteAccept
+ */
+export type InviteAccept = {
+    /**
+     * Token
+     */
+    token: string;
+};
+
+/**
+ * InviteCreate
+ */
+export type InviteCreate = {
+    role?: MemberRole;
+};
+
+/**
+ * InviteOut
+ */
+export type InviteOut = {
+    /**
+     * Token
+     */
+    token: string;
+    role: MemberRole;
+    /**
+     * Expiresat
+     */
+    expiresAt: number;
 };
 
 /**
@@ -215,6 +333,10 @@ export type MapDocument = {
      * Paths
      */
     paths?: Array<PathLine>;
+    /**
+     * Underlays
+     */
+    underlays?: Array<Underlay>;
 };
 
 /**
@@ -238,6 +360,86 @@ export type MapSummary = {
      * Draftversion
      */
     draftVersion: number;
+    /**
+     * Publishednumber
+     */
+    publishedNumber?: number | null;
+    /**
+     * Updatedat
+     */
+    updatedAt: string;
+    role?: MemberRole;
+    /**
+     * Permissions
+     *
+     * See api.permissions
+     */
+    permissions?: Array<string>;
+};
+
+/**
+ * MapUpdate
+ */
+export type MapUpdate = {
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Slug
+     *
+     * Short link /m/{slug}: 3-40 latin letters, digits and dashes
+     */
+    slug?: string | null;
+    accessMode?: AccessMode | null;
+};
+
+/**
+ * MemberAdd
+ */
+export type MemberAdd = {
+    /**
+     * Email
+     */
+    email: string;
+    role?: MemberRole;
+};
+
+/**
+ * MemberOut
+ */
+export type MemberOut = {
+    /**
+     * Userid
+     */
+    userId: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Email
+     */
+    email: string;
+    role: MemberRole;
+    /**
+     * Isyou
+     */
+    isYou: boolean;
+};
+
+/**
+ * MemberRole
+ *
+ * Role of a user on one map. What each role may do lives in api.permissions.
+ */
+export type MemberRole = 'owner' | 'editor' | 'photographer' | 'viewer';
+
+/**
+ * MemberUpdate
+ */
+export type MemberUpdate = {
+    role: MemberRole;
 };
 
 /**
@@ -342,6 +544,156 @@ export type PanoTiles = {
 };
 
 /**
+ * PanoramaCreate
+ */
+export type PanoramaCreate = {
+    /**
+     * Levelid
+     */
+    levelId: string;
+    /**
+     * Position
+     */
+    position: [
+        number,
+        number
+    ];
+    /**
+     * Headingdeg
+     *
+     * Compass heading of the first frame
+     */
+    headingDeg?: number | null;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Fovdeg
+     *
+     * FOV across the short side
+     */
+    fovDeg?: number | null;
+    /**
+     * Framecount
+     */
+    frameCount: number;
+    /**
+     * Device
+     */
+    device?: string | null;
+};
+
+/**
+ * PanoramaOut
+ */
+export type PanoramaOut = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Mapid
+     */
+    mapId: string;
+    /**
+     * Levelid
+     */
+    levelId: string;
+    /**
+     * Position
+     */
+    position: [
+        number,
+        number
+    ];
+    /**
+     * Headingdeg
+     */
+    headingDeg: number;
+    /**
+     * Cameraheightm
+     */
+    cameraHeightM: number;
+    /**
+     * Title
+     */
+    title: string | null;
+    /**
+     * Source
+     */
+    source: string;
+    status: PanoramaStatus;
+    /**
+     * Progress
+     */
+    progress: number;
+    /**
+     * Error
+     */
+    error: string | null;
+    /**
+     * Framecount
+     */
+    frameCount: number;
+    tiles: PanoTiles | null;
+    /**
+     * Quality
+     */
+    quality: {
+        [key: string]: number | number | string | null;
+    } | null;
+    /**
+     * Createdat
+     */
+    createdAt: string;
+};
+
+/**
+ * PanoramaStatus
+ */
+export type PanoramaStatus = 'uploading' | 'processing' | 'ready' | 'failed';
+
+/**
+ * PanoramaUpdate
+ */
+export type PanoramaUpdate = {
+    /**
+     * Levelid
+     */
+    levelId?: string | null;
+    /**
+     * Position
+     */
+    position?: [
+        number,
+        number
+    ] | null;
+    /**
+     * Headingdeg
+     */
+    headingDeg?: number | null;
+    /**
+     * Title
+     */
+    title?: string | null;
+};
+
+/**
+ * PasswordChange
+ */
+export type PasswordChange = {
+    /**
+     * Currentpassword
+     */
+    currentPassword: string;
+    /**
+     * Newpassword
+     */
+    newPassword: string;
+};
+
+/**
  * PathLine
  */
 export type PathLine = {
@@ -415,6 +767,38 @@ export type PolygonGeometry = {
 };
 
 /**
+ * ProfileUpdate
+ */
+export type ProfileUpdate = {
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * PublicManifest
+ */
+export type PublicManifest = {
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Version
+     */
+    version: number;
+    /**
+     * Bundleurl
+     */
+    bundleUrl: string;
+};
+
+/**
  * PublishOut
  */
 export type PublishOut = {
@@ -427,6 +811,10 @@ export type PublishOut = {
      */
     number: number;
     status: VersionStatus;
+    /**
+     * Slug
+     */
+    slug: string;
 };
 
 /**
@@ -445,6 +833,53 @@ export type RegisterRequest = {
      * Password
      */
     password: string;
+};
+
+/**
+ * Underlay
+ *
+ * Raster plan placed under the drawing (uploaded image), per level.
+ */
+export type Underlay = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Levelid
+     */
+    levelId: string;
+    /**
+     * Url
+     */
+    url: string;
+    /**
+     * Coordinates
+     *
+     * Corners: top-left, top-right, bottom-right, bottom-left
+     */
+    coordinates: [
+        [
+            number,
+            number
+        ],
+        [
+            number,
+            number
+        ],
+        [
+            number,
+            number
+        ],
+        [
+            number,
+            number
+        ]
+    ];
+    /**
+     * Opacity
+     */
+    opacity?: number;
 };
 
 /**
@@ -656,6 +1091,72 @@ export type MeResponses = {
 
 export type MeResponse = MeResponses[keyof MeResponses];
 
+export type UpdateProfileData = {
+    body: ProfileUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/auth/me';
+};
+
+export type UpdateProfileErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateProfileError = UpdateProfileErrors[keyof UpdateProfileErrors];
+
+export type UpdateProfileResponses = {
+    /**
+     * Successful Response
+     */
+    200: UserOut;
+};
+
+export type UpdateProfileResponse = UpdateProfileResponses[keyof UpdateProfileResponses];
+
+export type ChangePasswordData = {
+    body: PasswordChange;
+    path?: never;
+    query?: never;
+    url: '/api/auth/password';
+};
+
+export type ChangePasswordErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChangePasswordError = ChangePasswordErrors[keyof ChangePasswordErrors];
+
+export type ChangePasswordResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type ChangePasswordResponse = ChangePasswordResponses[keyof ChangePasswordResponses];
+
+export type LogoutEverywhereData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/logout-all';
+};
+
+export type LogoutEverywhereResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type LogoutEverywhereResponse = LogoutEverywhereResponses[keyof LogoutEverywhereResponses];
+
 export type ListMapsData = {
     body?: never;
     path?: never;
@@ -698,6 +1199,96 @@ export type CreateMapResponses = {
 };
 
 export type CreateMapResponse = CreateMapResponses[keyof CreateMapResponses];
+
+export type DeleteMapData = {
+    body?: never;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}';
+};
+
+export type DeleteMapErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteMapError = DeleteMapErrors[keyof DeleteMapErrors];
+
+export type DeleteMapResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteMapResponse = DeleteMapResponses[keyof DeleteMapResponses];
+
+export type GetMapData = {
+    body?: never;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}';
+};
+
+export type GetMapErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetMapError = GetMapErrors[keyof GetMapErrors];
+
+export type GetMapResponses = {
+    /**
+     * Successful Response
+     */
+    200: MapSummary;
+};
+
+export type GetMapResponse = GetMapResponses[keyof GetMapResponses];
+
+export type UpdateMapData = {
+    body: MapUpdate;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}';
+};
+
+export type UpdateMapErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateMapError = UpdateMapErrors[keyof UpdateMapErrors];
+
+export type UpdateMapResponses = {
+    /**
+     * Successful Response
+     */
+    200: MapSummary;
+};
+
+export type UpdateMapResponse = UpdateMapResponses[keyof UpdateMapResponses];
 
 export type GetDraftData = {
     body?: never;
@@ -784,7 +1375,566 @@ export type PublishResponses = {
     /**
      * Successful Response
      */
-    202: PublishOut;
+    200: PublishOut;
 };
 
 export type PublishResponse = PublishResponses[keyof PublishResponses];
+
+export type UploadAssetData = {
+    body: BodyUploadAsset;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/assets';
+};
+
+export type UploadAssetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadAssetError = UploadAssetErrors[keyof UploadAssetErrors];
+
+export type UploadAssetResponses = {
+    /**
+     * Successful Response
+     */
+    201: AssetOut;
+};
+
+export type UploadAssetResponse = UploadAssetResponses[keyof UploadAssetResponses];
+
+export type CreateCaptureTokenData = {
+    body?: never;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/capture-token';
+};
+
+export type CreateCaptureTokenErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateCaptureTokenError = CreateCaptureTokenErrors[keyof CreateCaptureTokenErrors];
+
+export type CreateCaptureTokenResponses = {
+    /**
+     * Successful Response
+     */
+    200: CaptureTokenOut;
+};
+
+export type CreateCaptureTokenResponse = CreateCaptureTokenResponses[keyof CreateCaptureTokenResponses];
+
+export type ListMembersData = {
+    body?: never;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/members';
+};
+
+export type ListMembersErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListMembersError = ListMembersErrors[keyof ListMembersErrors];
+
+export type ListMembersResponses = {
+    /**
+     * Response List Members
+     *
+     * Successful Response
+     */
+    200: Array<MemberOut>;
+};
+
+export type ListMembersResponse = ListMembersResponses[keyof ListMembersResponses];
+
+export type AddMemberData = {
+    body: MemberAdd;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/members';
+};
+
+export type AddMemberErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AddMemberError = AddMemberErrors[keyof AddMemberErrors];
+
+export type AddMemberResponses = {
+    /**
+     * Successful Response
+     */
+    201: MemberOut;
+};
+
+export type AddMemberResponse = AddMemberResponses[keyof AddMemberResponses];
+
+export type RemoveMemberData = {
+    body?: never;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/members/{user_id}';
+};
+
+export type RemoveMemberErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RemoveMemberError = RemoveMemberErrors[keyof RemoveMemberErrors];
+
+export type RemoveMemberResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type RemoveMemberResponse = RemoveMemberResponses[keyof RemoveMemberResponses];
+
+export type UpdateMemberData = {
+    body: MemberUpdate;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/members/{user_id}';
+};
+
+export type UpdateMemberErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateMemberError = UpdateMemberErrors[keyof UpdateMemberErrors];
+
+export type UpdateMemberResponses = {
+    /**
+     * Successful Response
+     */
+    200: MemberOut;
+};
+
+export type UpdateMemberResponse = UpdateMemberResponses[keyof UpdateMemberResponses];
+
+export type CreateInviteData = {
+    body: InviteCreate;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/invites';
+};
+
+export type CreateInviteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateInviteError = CreateInviteErrors[keyof CreateInviteErrors];
+
+export type CreateInviteResponses = {
+    /**
+     * Successful Response
+     */
+    200: InviteOut;
+};
+
+export type CreateInviteResponse = CreateInviteResponses[keyof CreateInviteResponses];
+
+export type AcceptInviteData = {
+    body: InviteAccept;
+    path?: never;
+    query?: never;
+    url: '/api/invites/accept';
+};
+
+export type AcceptInviteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AcceptInviteError = AcceptInviteErrors[keyof AcceptInviteErrors];
+
+export type AcceptInviteResponses = {
+    /**
+     * Successful Response
+     */
+    200: MapSummary;
+};
+
+export type AcceptInviteResponse = AcceptInviteResponses[keyof AcceptInviteResponses];
+
+export type ListPanoramasData = {
+    body?: never;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/panoramas';
+};
+
+export type ListPanoramasErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListPanoramasError = ListPanoramasErrors[keyof ListPanoramasErrors];
+
+export type ListPanoramasResponses = {
+    /**
+     * Response List Panoramas
+     *
+     * Successful Response
+     */
+    200: Array<PanoramaOut>;
+};
+
+export type ListPanoramasResponse = ListPanoramasResponses[keyof ListPanoramasResponses];
+
+export type CreateCaptureData = {
+    body: PanoramaCreate;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/panoramas';
+};
+
+export type CreateCaptureErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateCaptureError = CreateCaptureErrors[keyof CreateCaptureErrors];
+
+export type CreateCaptureResponses = {
+    /**
+     * Successful Response
+     */
+    201: PanoramaOut;
+};
+
+export type CreateCaptureResponse = CreateCaptureResponses[keyof CreateCaptureResponses];
+
+export type UploadFrameData = {
+    body: BodyUploadFrame;
+    path: {
+        /**
+         * Pano Id
+         */
+        pano_id: string;
+        /**
+         * Index
+         */
+        index: number;
+    };
+    query?: never;
+    url: '/api/panoramas/{pano_id}/frames/{index}';
+};
+
+export type UploadFrameErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadFrameError = UploadFrameErrors[keyof UploadFrameErrors];
+
+export type UploadFrameResponses = {
+    /**
+     * Successful Response
+     */
+    200: PanoramaOut;
+};
+
+export type UploadFrameResponse = UploadFrameResponses[keyof UploadFrameResponses];
+
+export type StartStitchingData = {
+    body?: never;
+    path: {
+        /**
+         * Pano Id
+         */
+        pano_id: string;
+    };
+    query?: never;
+    url: '/api/panoramas/{pano_id}/stitch';
+};
+
+export type StartStitchingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StartStitchingError = StartStitchingErrors[keyof StartStitchingErrors];
+
+export type StartStitchingResponses = {
+    /**
+     * Successful Response
+     */
+    200: PanoramaOut;
+};
+
+export type StartStitchingResponse = StartStitchingResponses[keyof StartStitchingResponses];
+
+export type UploadPanoramaData = {
+    body: BodyUploadPanorama;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/panoramas/upload';
+};
+
+export type UploadPanoramaErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadPanoramaError = UploadPanoramaErrors[keyof UploadPanoramaErrors];
+
+export type UploadPanoramaResponses = {
+    /**
+     * Successful Response
+     */
+    201: PanoramaOut;
+};
+
+export type UploadPanoramaResponse = UploadPanoramaResponses[keyof UploadPanoramaResponses];
+
+export type DeletePanoramaData = {
+    body?: never;
+    path: {
+        /**
+         * Pano Id
+         */
+        pano_id: string;
+    };
+    query?: never;
+    url: '/api/panoramas/{pano_id}';
+};
+
+export type DeletePanoramaErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeletePanoramaError = DeletePanoramaErrors[keyof DeletePanoramaErrors];
+
+export type DeletePanoramaResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeletePanoramaResponse = DeletePanoramaResponses[keyof DeletePanoramaResponses];
+
+export type GetPanoramaData = {
+    body?: never;
+    path: {
+        /**
+         * Pano Id
+         */
+        pano_id: string;
+    };
+    query?: never;
+    url: '/api/panoramas/{pano_id}';
+};
+
+export type GetPanoramaErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetPanoramaError = GetPanoramaErrors[keyof GetPanoramaErrors];
+
+export type GetPanoramaResponses = {
+    /**
+     * Successful Response
+     */
+    200: PanoramaOut;
+};
+
+export type GetPanoramaResponse = GetPanoramaResponses[keyof GetPanoramaResponses];
+
+export type UpdatePanoramaData = {
+    body: PanoramaUpdate;
+    path: {
+        /**
+         * Pano Id
+         */
+        pano_id: string;
+    };
+    query?: never;
+    url: '/api/panoramas/{pano_id}';
+};
+
+export type UpdatePanoramaErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdatePanoramaError = UpdatePanoramaErrors[keyof UpdatePanoramaErrors];
+
+export type UpdatePanoramaResponses = {
+    /**
+     * Successful Response
+     */
+    200: PanoramaOut;
+};
+
+export type UpdatePanoramaResponse = UpdatePanoramaResponses[keyof UpdatePanoramaResponses];
+
+export type GetManifestData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/public/maps/{slug}/manifest.json';
+};
+
+export type GetManifestErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetManifestError = GetManifestErrors[keyof GetManifestErrors];
+
+export type GetManifestResponses = {
+    /**
+     * Successful Response
+     */
+    200: PublicManifest;
+};
+
+export type GetManifestResponse = GetManifestResponses[keyof GetManifestResponses];
+
+export type GetBundleData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+        /**
+         * Number
+         */
+        number: number;
+    };
+    query?: never;
+    url: '/api/public/maps/{slug}/v/{number}/bundle.json';
+};
+
+export type GetBundleErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetBundleError = GetBundleErrors[keyof GetBundleErrors];
+
+export type GetBundleResponses = {
+    /**
+     * Response Get Bundle
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetBundleResponse = GetBundleResponses[keyof GetBundleResponses];

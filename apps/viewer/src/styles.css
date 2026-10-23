@@ -33,3 +33,14 @@
   background: rgb(37 99 235 / 0.9);
   color: #ffffff;
 }
+
+.pano-marker--next {
+  background: rgb(22 163 74 / 0.95);
+  font-size: 14px;
+  padding: 8px 12px;
+}
+
+.pano-marker--dest {
+  background: rgb(220 38 38 / 0.95);
+  color: #ffffff;
+}

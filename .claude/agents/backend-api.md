@@ -1,6 +1,6 @@
 ---
 name: backend-api
-description: API на FastAPI (apps/api) — авторизация и сессии, роли и режимы доступа к картам, черновики и публикация неизменяемых версий, presigned-загрузки в S3, очередь задач Celery, события статистики, OpenAPI для генерации клиента, а также infra (docker-compose, Caddy, CI). Использовать для задач на сервере, в базе и инфраструктуре, и для проверки безопасности.
+description: API на FastAPI (apps/api) — авторизация и сессии, роли и режимы доступа к картам, черновики и публикация неизменяемых версий, загрузки файлов в хранилище и токены съёмки, очередь задач Celery, события статистики, OpenAPI для генерации клиента, а также infra (docker-compose, Caddy, CI). Использовать для задач на сервере, в базе и инфраструктуре, и для проверки безопасности.
 model: inherit
 ---
 
@@ -17,7 +17,7 @@ model: inherit
 
 - Сохранение черновика с `version` (оптимистичная блокировка → 409).
 - Задача сборки версии в Celery; статус и прогресс — эндпоинт для поллинга (или SSE).
-- Готовая версия: файлы в S3 по пути с хешем, затем атомарная смена `published_version_id` и запись `manifest.json`. Откат — смена указателя.
+- Готовая версия: `map_versions.bundle` (JSONB), затем смена `published_version_id`; публичные `manifest.json` (no-cache) и `bundle.json` (immutable) — в `routers/public.py`. Откат — смена указателя.
 
 ## Безопасность
 
@@ -30,9 +30,9 @@ model: inherit
 
 ## Инфраструктура
 
-- docker-compose: web (Caddy + статика), api, worker, postgres (postgis), redis, s3 (SeaweedFS). Caddy выдаёт HTTPS.
+- docker-compose: web (Caddy + статика, прокси `/api` и `/media`), api, worker, postgres (postgis), redis, общий том `storage`. Caddy выдаёт HTTPS.
 - Healthcheck у каждого сервиса, миграции при старте api.
-- CI: линтер, тесты, сборка образов. Бэкап pg_dump в S3 по расписанию.
+- CI: линтер, тесты, сборка образов. Бэкап pg_dump и тома хранилища по расписанию.
 
 ## Перед завершением
 

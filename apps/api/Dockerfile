@@ -12,7 +12,7 @@ RUN mkdir -p apps/worker/src/worker && touch apps/worker/src/worker/__init__.py 
     && uv sync --frozen --no-dev --package api
 
 WORKDIR /app/apps/api
-RUN useradd --system --uid 10001 app
+RUN useradd --system --uid 10001 app && mkdir -p /data/storage && chown app /data/storage
 USER app
 EXPOSE 8000
 CMD ["sh", "-c", "alembic upgrade head && uvicorn api.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"]

@@ -153,6 +153,20 @@ class PathLine(CamelModel):
     geometry: LineStringGeometry
 
 
+class Underlay(CamelModel):
+    """Raster plan placed under the drawing (uploaded image), per level."""
+
+    id: str
+    level_id: str
+    url: str
+    coordinates: list[LonLat] = Field(
+        min_length=4,
+        max_length=4,
+        description="Corners: top-left, top-right, bottom-right, bottom-left",
+    )
+    opacity: float = Field(0.6, ge=0, le=1)
+
+
 class MapDocument(CamelModel):
     schema_version: int = SCHEMA_VERSION
     venue: Venue
@@ -164,3 +178,4 @@ class MapDocument(CamelModel):
     pois: list[Poi] = []
     panos: list[Pano] = []
     paths: list[PathLine] = []
+    underlays: list[Underlay] = []

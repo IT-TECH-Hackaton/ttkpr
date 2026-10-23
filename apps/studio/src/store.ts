@@ -1,56 +1,151 @@
-import type { MapDocument, Poi, Unit } from "@ttkpr/api-client";
-import { sortedLevels } from "@ttkpr/map-core";
+import type {
+  Connector,
+  Level,
+  MapDocument,
+  Opening,
+  Poi,
+  Underlay,
+  Unit,
+} from "@ttkpr/api-client";
+import { CONNECTOR_LABELS, categoryLabel, sortedLevels } from "@ttkpr/map-core";
 import { temporal } from "zundo";
 import { create } from "zustand";
-import demoMap from "../../../fixtures/demo-map.json";
 
-export type Tool = "select" | "room" | "rect" | "poi";
+export type Tool = "select" | "rect" | "room" | "door" | "stairs" | "poi" | "pano";
+export type DoorType = "door" | "double" | "passage" | "entrance";
+export type ConnectorKind = Connector["kind"];
+export type LayerGroup =
+  | "underlay"
+  | "rooms"
+  | "labels"
+  | "doors"
+  | "connectors"
+  | "points"
+  | "panos";
+export type SaveState = "saved" | "dirty" | "saving" | "offline" | "conflict" | "error";
 
 type Position = [number, number];
 
 interface DraftState {
+  mapId: string | null;
   doc: MapDocument;
+  /** Server draft version the current document is based on (optimistic locking). */
+  version: number;
+  saveState: SaveState;
+  saveError: string | null;
   levelId: string;
   tool: Tool;
   selectedId: string | null;
+  /** Point picked on the plan for a new panorama (phone capture or 360° upload). */
+  panoSpot: Position | null;
+  /** Pano being moved: the next click on the plan sets its position. */
+  movingPanoId: string | null;
+  /** Tool options (toolbar dropdowns) and view settings. */
+  doorType: DoorType;
+  connectorKind: ConnectorKind;
+  poiCategory: string;
+  snapping: boolean;
+  hiddenLayers: LayerGroup[];
+  /** Short message near the toolbar (e.g. "Кликните по стене"). */
+  hint: string | null;
+
+  /** Bumped on every load, so autosave re-reads its baseline. */
+  loadedAt: number;
+  /** restored: the document is a local backup that still has to reach the server. */
+  load: (mapId: string, doc: MapDocument, version: number, restored?: boolean) => void;
+  markSaved: (version: number) => void;
+  setSaveState: (state: SaveState, error?: string) => void;
   setLevel: (levelId: string) => void;
   setTool: (tool: Tool) => void;
   select: (id: string | null) => void;
+  setPanoSpot: (spot: Position | null) => void;
+  setMovingPano: (id: string | null) => void;
+  setOptions: (
+    patch: Partial<Pick<DraftState, "doorType" | "connectorKind" | "poiCategory" | "snapping">>,
+  ) => void;
+  toggleLayer: (group: LayerGroup) => void;
+  setHint: (hint: string | null) => void;
+
   addUnit: (ring: Position[]) => void;
   addPoi: (position: Position) => void;
+  addOpening: (a: Position, b: Position) => void;
+  addConnector: (position: Position) => void;
   updateUnit: (id: string, patch: Partial<Unit>) => void;
   updatePoi: (id: string, patch: Partial<Poi>) => void;
   remove: (id: string) => void;
-  load: (doc: MapDocument) => void;
-}
-
-const AUTOSAVE_KEY = "ttk-studio-draft";
-
-function initialDoc(): MapDocument {
-  try {
-    const saved = localStorage.getItem(AUTOSAVE_KEY);
-    if (saved) return JSON.parse(saved) as MapDocument;
-  } catch {
-    // Storage may be unavailable (private mode); fall back to the demo.
-  }
-  // JSON imports widen [lon, lat] tuples to number[]; the file is generated from the schema.
-  return demoMap as unknown as MapDocument;
+  addLevel: () => void;
+  updateLevel: (id: string, patch: Partial<Level>) => void;
+  addUnderlay: (underlay: Omit<Underlay, "id" | "levelId">) => void;
+  updateUnderlay: (id: string, patch: Partial<Underlay>) => void;
 }
 
 const newId = (prefix: string) => `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
 
-const doc = initialDoc();
+export const EMPTY_DOC: MapDocument = {
+  venue: { id: "draft", name: "", anchor: [37.6176, 55.7558] },
+  levels: [],
+};
+
+function withDefaultLevel(doc: MapDocument): MapDocument {
+  if (doc.levels?.length) return doc;
+  return { ...doc, levels: [{ id: "l1", name: "1 этаж", ordinal: 0 }] };
+}
 
 export const useDraft = create<DraftState>()(
   temporal(
     (set) => ({
-      doc,
-      levelId: sortedLevels(doc)[0]?.id ?? "",
+      mapId: null,
+      doc: EMPTY_DOC,
+      version: 0,
+      saveState: "saved",
+      saveError: null,
+      levelId: "",
       tool: "select",
       selectedId: null,
-      setLevel: (levelId) => set({ levelId, selectedId: null }),
-      setTool: (tool) => set({ tool, selectedId: null }),
-      select: (selectedId) => set({ selectedId }),
+      panoSpot: null,
+      movingPanoId: null,
+      doorType: "door",
+      connectorKind: "stairs",
+      poiCategory: "stand",
+      snapping: true,
+      hiddenLayers: [],
+      hint: null,
+      loadedAt: 0,
+
+      load: (mapId, doc, version, restored = false) => {
+        const ready = withDefaultLevel(doc);
+        set({
+          mapId,
+          doc: ready,
+          version,
+          saveState: ready === doc && !restored ? "saved" : "dirty",
+          loadedAt: Date.now(),
+          saveError: null,
+          levelId: sortedLevels(ready)[0]?.id ?? "",
+          tool: "select",
+          selectedId: null,
+          panoSpot: null,
+          movingPanoId: null,
+        });
+        useDraft.temporal.getState().clear();
+      },
+      markSaved: (version) => set({ version, saveState: "saved", saveError: null }),
+      setSaveState: (saveState, error) => set({ saveState, saveError: error ?? null }),
+      setLevel: (levelId) => set({ levelId, selectedId: null, panoSpot: null }),
+      setTool: (tool) =>
+        set({ tool, selectedId: null, panoSpot: null, movingPanoId: null, hint: null }),
+      select: (selectedId) => set({ selectedId, panoSpot: null }),
+      setPanoSpot: (panoSpot) => set({ panoSpot, selectedId: null }),
+      setMovingPano: (movingPanoId) => set({ movingPanoId }),
+      setOptions: (patch) => set(patch),
+      toggleLayer: (group) =>
+        set((s) => ({
+          hiddenLayers: s.hiddenLayers.includes(group)
+            ? s.hiddenLayers.filter((g) => g !== group)
+            : [...s.hiddenLayers, group],
+        })),
+      setHint: (hint) => set({ hint }),
+
       addUnit: (ring) =>
         set((s) => {
           const unit: Unit = {
@@ -61,25 +156,64 @@ export const useDraft = create<DraftState>()(
             walkable: true,
             geometry: { type: "Polygon", coordinates: [ring] },
           };
-          return {
-            doc: { ...s.doc, units: [...(s.doc.units ?? []), unit] },
-            selectedId: unit.id,
-            tool: "select",
-          };
+          // The tool stays active: draw room after room, rename them in the panel.
+          return { doc: { ...s.doc, units: [...(s.doc.units ?? []), unit] }, selectedId: unit.id };
         }),
       addPoi: (position) =>
         set((s) => {
+          const sameCategory = (s.doc.pois ?? []).filter(
+            (p) => p.category === s.poiCategory,
+          ).length;
           const poi: Poi = {
             id: newId("p"),
             levelId: s.levelId,
-            name: "Новая точка",
-            category: "other",
+            name: `${categoryLabel(s.poiCategory)} ${sameCategory + 1}`,
+            category: s.poiCategory,
             position,
           };
+          return { doc: { ...s.doc, pois: [...(s.doc.pois ?? []), poi] }, selectedId: poi.id };
+        }),
+      addOpening: (a, b) =>
+        set((s) => {
+          const opening: Opening = {
+            id: newId("o"),
+            levelId: s.levelId,
+            category: s.doorType === "double" ? "door" : s.doorType,
+            geometry: { type: "LineString", coordinates: [a, b] },
+          };
           return {
-            doc: { ...s.doc, pois: [...(s.doc.pois ?? []), poi] },
-            selectedId: poi.id,
-            tool: "select",
+            doc: { ...s.doc, openings: [...(s.doc.openings ?? []), opening] },
+            selectedId: opening.id,
+          };
+        }),
+      addConnector: (position) =>
+        set((s) => {
+          // Stairs/lifts join this floor with the one above; a second floor appears if needed.
+          const levels = sortedLevels(s.doc);
+          const current = levels.find((l) => l.id === s.levelId);
+          let above = levels.find((l) => current && l.ordinal === current.ordinal + 1);
+          let docLevels = s.doc.levels ?? [];
+          if (!above) {
+            const ordinal = (current?.ordinal ?? 0) + 1;
+            above = { id: newId("l"), name: `${ordinal + 1} этаж`, ordinal };
+            docLevels = [...docLevels, above];
+          }
+          const connector: Connector = {
+            id: newId("c"),
+            kind: s.connectorKind,
+            name: CONNECTOR_LABELS[s.connectorKind],
+            points: [
+              { levelId: s.levelId, position },
+              { levelId: above.id, position },
+            ],
+          };
+          return {
+            doc: {
+              ...s.doc,
+              levels: docLevels,
+              connectors: [...(s.doc.connectors ?? []), connector],
+            },
+            selectedId: connector.id,
           };
         }),
       updateUnit: (id, patch) =>
@@ -96,13 +230,47 @@ export const useDraft = create<DraftState>()(
             ...s.doc,
             units: s.doc.units?.filter((u) => u.id !== id),
             pois: s.doc.pois?.filter((p) => p.id !== id),
+            openings: s.doc.openings?.filter((o) => o.id !== id),
+            connectors: s.doc.connectors?.filter((c) => c.id !== id),
+            underlays: s.doc.underlays?.filter((u) => u.id !== id),
           },
           selectedId: null,
         })),
-      load: (next) =>
-        set({ doc: next, levelId: sortedLevels(next)[0]?.id ?? "", selectedId: null }),
+      addLevel: () =>
+        set((s) => {
+          const levels = sortedLevels(s.doc);
+          const ordinal = (levels.at(-1)?.ordinal ?? -1) + 1;
+          const level: Level = { id: newId("l"), name: `${ordinal + 1} этаж`, ordinal };
+          return {
+            doc: { ...s.doc, levels: [...(s.doc.levels ?? []), level] },
+            levelId: level.id,
+            selectedId: null,
+          };
+        }),
+      updateLevel: (id, patch) =>
+        set((s) => ({
+          doc: {
+            ...s.doc,
+            levels: s.doc.levels?.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+          },
+        })),
+      addUnderlay: (underlay) =>
+        set((s) => {
+          const created: Underlay = { ...underlay, id: newId("ul"), levelId: s.levelId };
+          return {
+            doc: { ...s.doc, underlays: [...(s.doc.underlays ?? []), created] },
+            selectedId: created.id,
+            tool: "select",
+          };
+        }),
+      updateUnderlay: (id, patch) =>
+        set((s) => ({
+          doc: {
+            ...s.doc,
+            underlays: s.doc.underlays?.map((u) => (u.id === id ? { ...u, ...patch } : u)),
+          },
+        })),
     }),
-    // Only document edits are undoable; tool/selection/level are UI state.
     {
       partialize: (state) => ({ doc: state.doc }),
       // Record history only when the document itself changed, so undo never "does nothing".
@@ -111,14 +279,5 @@ export const useDraft = create<DraftState>()(
     },
   ),
 );
-
-useDraft.subscribe((state, prev) => {
-  if (state.doc === prev.doc) return;
-  try {
-    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(state.doc));
-  } catch {
-    // Autosave is a convenience; ignore quota/private-mode errors.
-  }
-});
 
 if (import.meta.env.DEV) (window as unknown as { draft?: typeof useDraft }).draft = useDraft;

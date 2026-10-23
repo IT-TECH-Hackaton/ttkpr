@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.sw.json",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@photo-sphere-viewer/core": "^5.15.1",
@@ -18,16 +19,25 @@
     "@ttkpr/api-client": "workspace:*",
     "@ttkpr/map-core": "workspace:*",
     "@ttkpr/ui": "workspace:*",
+    "idb-keyval": "^6.3.0",
+    "lucide-react": "^1.61.0",
     "maplibre-gl": "^6.15.0",
     "minisearch": "^7.2.0",
     "motion": "^14.5.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-modal-sheet": "^5.6.0",
-    "three": "^0.186.1"
+    "three": "^0.186.1",
+    "workbox-core": "^7.4.1",
+    "workbox-expiration": "^7.4.1",
+    "workbox-precaching": "^7.4.1",
+    "workbox-routing": "^7.4.1",
+    "workbox-strategies": "^7.4.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/geojson": "^7946.0.16",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

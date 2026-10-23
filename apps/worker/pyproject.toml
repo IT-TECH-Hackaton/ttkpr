@@ -12,9 +12,11 @@ dependencies = [
     "map-schema",
     "numpy>=2.5.4",
     "opencv-python-headless>=5.0.0.93",
+    "psycopg[binary]>=3.3.6",
     "pyvips[binary]>=3.2.0",
     "scipy>=1.18.1",
     "shapely>=2.2.0",
+    "sqlalchemy>=2.1.6",
 ]
 
 [build-system]

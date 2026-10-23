@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -22,12 +22,23 @@ class AccessMode(StrEnum):
 
 
 class MemberRole(StrEnum):
+    """Role of a user on one map. What each role may do lives in api.permissions."""
+
     OWNER = "owner"
     EDITOR = "editor"
+    PHOTOGRAPHER = "photographer"
+    VIEWER = "viewer"
 
 
 class VersionStatus(StrEnum):
     BUILDING = "building"
+    READY = "ready"
+    FAILED = "failed"
+
+
+class PanoramaStatus(StrEnum):
+    UPLOADING = "uploading"
+    PROCESSING = "processing"
     READY = "ready"
     FAILED = "failed"
 
@@ -94,4 +105,36 @@ class MapVersion(Base):
     number: Mapped[int] = mapped_column(Integer)
     status: Mapped[VersionStatus] = mapped_column(String(16), default=VersionStatus.BUILDING)
     bundle_url: Mapped[str | None] = mapped_column(String(500), default=None)
+    # Immutable published document (draft + ready panoramas) served to visitors.
+    bundle: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Panorama(Base):
+    """Lives outside the draft document: frames, stitching and tiles have a server lifecycle.
+
+    Ready panoramas are merged into the bundle at publish time.
+    """
+
+    __tablename__ = "panoramas"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    map_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("maps.id", ondelete="CASCADE"), index=True)
+    level_id: Mapped[str] = mapped_column(String(64))
+    lon: Mapped[float] = mapped_column(Float)
+    lat: Mapped[float] = mapped_column(Float)
+    heading_deg: Mapped[float] = mapped_column(Float, default=0.0)
+    camera_height_m: Mapped[float] = mapped_column(Float, default=1.5)
+    title: Mapped[str | None] = mapped_column(String(200), default=None)
+    source: Mapped[str] = mapped_column(String(16), default="capture")  # capture | upload
+    status: Mapped[PanoramaStatus] = mapped_column(String(16), default=PanoramaStatus.UPLOADING)
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text, default=None)
+    frame_count: Mapped[int] = mapped_column(Integer, default=0)
+    capture_meta: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    tiles: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    quality: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )

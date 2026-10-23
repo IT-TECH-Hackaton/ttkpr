@@ -6,6 +6,8 @@ export type MapBundle = MapDocument;
 export interface MapManifest {
   slug: string;
   title: string;
+  /** Published version number; changes on every publish. */
+  version?: number;
   bundleUrl: string;
 }
 

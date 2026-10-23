@@ -7,11 +7,11 @@
 ## Стек (зафиксирован)
 
 - **Фронт:** pnpm workspaces + Turborepo, TypeScript, React 19, Vite, TanStack Router/Query, Tailwind v4 + shadcn/ui, Zustand (+ zundo), vite-plugin-pwa.
-- **Карта:** MapLibre GL JS + Terra Draw + turf.js. Поиск — MiniSearch. Маршрут на клиенте — ngraph.path (A*).
+- **Карта:** MapLibre GL JS + Terra Draw + turf.js. Поиск — MiniSearch. Маршруты — свой граф и Дейкстра в `map-core/src/routing`, на клиенте.
 - **Панорамы:** Photo Sphere Viewer 5 (Markers, VirtualTour, Gyroscope, EquirectangularTilesAdapter).
 - **Бэк:** Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2 + GeoAlchemy2, Alembic. PostgreSQL 17 + PostGIS, Redis, Celery.
 - **CV-воркер:** OpenCV (cv2.detail / `stitching`), numpy/scipy, pyvips, shapely.
-- **Хранилище:** S3 (локально SeaweedFS — MinIO больше не публикует образы), российский CDN (не Cloudflare — в РФ режется).
+- **Хранилище:** файлы в папке/томе `STORAGE_DIR` (общая для API и воркера, раздаётся как `/media`); S3-адаптер — следующий шаг. Перед `/media` и `/api/public` — российский CDN (не Cloudflare — в РФ режется).
 - **Инфра:** Docker Compose, Caddy (HTTPS), GitHub Actions.
 - Пакетные менеджеры: `pnpm` для JS, `uv` для Python. Не смешивать с npm/pip.
 - Версии: Vite 8, MapLibre 6, TypeScript 7 (нативный компилятор). Исключение — `packages/api-client` держит TypeScript 6: генератору нужен JS API компилятора.
@@ -19,36 +19,71 @@
 ## Структура
 
 ```
-apps/viewer          PWA посетителя: карта, поиск, шторка, панорама (ленивый чанк)
-apps/studio          редактор организатора: рисование плана, точки, undo/redo
-apps/api             FastAPI: сессии, карты, черновик с блокировкой, публикация версий
-apps/worker          Python: тайлинг панорам (готово), склейка и сборка карты (заглушки задач)
+apps/viewer          PWA посетителя: карта, поиск, шторка, панорама; маршрут «откуда → куда»
+                     и проход по панорамам; «Сохранить офлайн», «Мои карты», свой service worker
+apps/studio          вход/регистрация, профиль, мои карты, команда и приглашения, редактор
+                     (панели как в Mappedin, инструменты с привязкой, офлайн-копия правок),
+                     «Поделиться» (адрес, доступ, QR, метки), съёмка с телефона (очередь кадров)
+apps/api             FastAPI: сессии, карты, черновик с блокировкой, публикация версий, публичные
+                     manifest/bundle, панорамы (кадры по QR-токену), загрузки, /media
+apps/worker          Python: склейка панорам по гироскопу + SIFT (worker.stitch), тайлы
 packages/map-schema  Pydantic-схема карты + геометрия — источник правды для OpenAPI
-packages/map-core    TS: загрузка бандла, слои MapLibre, геометрия, точки в панорамах
+packages/map-core    TS: бандл, слои MapLibre, геометрия, маршруты, ориентация телефона, подложки
 packages/ui          токены Tailwind и общие компоненты
 packages/api-client  генерируется `pnpm gen:api` из OpenAPI, руками не править
 fixtures/            общие тестовые векторы геометрии и демо-карта
-infra/               docker-compose (полный и dev), Caddyfile, SeaweedFS
+infra/               docker-compose (полный и dev), Caddyfile
+data/                локальное хранилище файлов (data/storage) и логи dev-серверов, не в git
 ```
-
 ## Команды
 
-- `pnpm dev` — viewer (5173) и studio (5174); `HTTPS=1 pnpm dev` — для проверки с телефона.
-- `pnpm lint` · `pnpm typecheck` · `pnpm test` · `pnpm build` — JS-проверки (Biome, tsc, Vitest).
+- Запуск всего локально:
+  1. `docker compose -f infra/docker-compose.dev.yml up -d` — Postgres и Redis;
+  2. `cd apps/api && uv run alembic upgrade head && uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 --proxy-headers` (на Windows без `--reload`: перезагрузка зависает);
+  3. `uv run --package worker celery -A worker.celery_app worker -Q default,heavy --pool=solo` (на Windows нужен `--pool=solo`);
+  4. `HTTPS=1 pnpm dev` — viewer https://localhost:5173 и studio https://localhost:5174 (HTTPS обязателен для камеры телефона; в QR и ссылках подставляется LAN-адрес машины).
+- `pnpm lint` · `pnpm typecheck` · `pnpm test` · `pnpm build` — JS-проверки (Biome, tsc, Vitest); `pnpm --filter @ttkpr/viewer e2e` — офлайн и маршруты в собранной PWA (Playwright, Chromium).
 - `uv run ruff check .` · `uv run mypy packages/map-schema/src apps/api/src apps/worker/src` · `uv run pytest` — Python. Тесты API с базой: `TEST_DATABASE_URL=postgresql+asyncpg://…`, без неё пропускаются.
 - `pnpm gen:api` — после любого изменения схемы или ручек API; CI проверяет, что клиент закоммичен.
 - `uv run --package worker python -m worker.demo` — пересобрать демо-карту и тестовую панораму-сетку.
-- `docker compose -f infra/docker-compose.dev.yml up -d` — Postgres, Redis, S3 для локальной работы; `infra/docker-compose.yml` — весь стек за Caddy.
+- `infra/docker-compose.yml` — весь стек за Caddy (https://localhost и https://studio.localhost).
 - Миграции: `cd apps/api && uv run alembic revision --autogenerate -m "…"`, затем проверить файл руками.
+- Задачи Celery отправляются по имени; очередь задаётся в `apps/api/src/api/queue.py` (`QUEUES`) и должна совпадать с очередями воркера.
+
+## Роли
+
+Роль задаётся на каждой карте (`map_members.role`). Единственный источник правды — `apps/api/src/api/permissions.py` (таблица прав там же); каждая ручка вызывает `member_map(..., Permission.X)`. Студия только прячет недоступное (`apps/studio/src/lib/permissions.ts`).
+
+| Роль                   | Может                                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------------- |
+| owner / Владелец       | всё, включая команду и удаление карты; последнего владельца нельзя понизить или удалить |
+| editor / Редактор      | план, точки, панорамы, публикация, «Поделиться»                                         |
+| photographer / Съёмщик | снимать и загружать панорамы, смотреть план                                             |
+| viewer / Наблюдатель   | только смотреть черновик и приватную опубликованную карту                               |
+
+QR-токен съёмки действует от имени выдавшего его участника и с его текущей ролью: удалили из команды — ссылка перестала работать.
+
+## Маршруты
+
+- Граф строится на клиенте из бандла (`buildNavGraph`), поэтому маршруты работают офлайн и без API. Узлы: двери (и точки подхода к ним в 0,9 м внутри каждой комнаты), точки, лестницы/лифты, внутренние углы комнат. Внутри комнаты — рёбра по прямой видимости; комнаты `walkable: false` и `nonpublic` не проходятся.
+- Стоимость: метры пешком + штраф за этаж (`CONNECTOR_COST`); «Без ступенек» выкидывает лестницы и эскалаторы. Подсказки собираются в `route.ts`: двери, повороты, этажи.
+- URL посетителя: `from`/`to` — id точки или `@lon,lat,levelId`; `acc` — без ступенек; `here` — QR-метка «Вы здесь»; `walk` — номер панорамы при проходе.
+- Проход по панорамам: `panosAlongRoute` (до 4 м от линии, по порядку), взгляд — вдоль линии маршрута, линия на полу — polyline-маркер PSV. Студия показывает, куда не дойти (`RouteCheck`).
+
+## Офлайн
+
+- Посетитель: «Сохранить офлайн» кладёт manifest, bundle, все тайлы панорам, подложки и глифы в кеш `offline-maps`; `src/sw.ts` всегда отдаёт сохранённое первым. Работает только в собранной версии (в dev service worker не регистрируется). Проверка: `pnpm --filter @ttkpr/viewer e2e`.
+- Организатор: кадры съёмки сначала пишутся в IndexedDB (`studio/src/lib/captureQueue.ts`), правки плана — в localStorage (`studio/src/lib/autosave.ts`); и то и другое уходит на сервер, когда появляется сеть.
 
 ## Жёсткие правила
 
+- В MapLibre 6 тайлы 512 px: метры на пиксель = 78271.517·cos(lat)/2^zoom (не формула для 256 px).
 - **Mobile first.** Любой экран viewer проверяется на ширине 375 px и в мобильном превью. Стартовый JS viewer не должен расти выше базы ~465 КБ gzip (~300 КБ из них — MapLibre 6); PSV/three.js — только ленивым чанком.
 - **Посетитель читает только статику с CDN** (`manifest.json` → неизменяемый `bundle.json` + тайлы). Не добавлять API-запросы в горячий путь viewer.
 - **Панорамы только тайлами.** Никогда не грузить 8K equirect целиком (iOS падает по памяти; лимит canvas ~16.7 Мпикс).
 - **HTTPS везде**, включая dev: без него не работают камера и гироскоп.
 - iOS: `DeviceOrientationEvent.requestPermission()` и `getUserMedia` — только по жесту пользователя, одной кнопкой.
-- Все загружаемые изображения перекодируются на сервере (убрать EXIF/GPS). Загрузка — через presigned URL с ограничением типа и размера.
+- Все загружаемые изображения перекодируются на сервере (убрать EXIF/GPS), проверяются сигнатура и размер. Сырые кадры съёмки через `/media` не раздаются.
 - Публикация не меняет ссылку: `/m/{slug}` → manifest → версия. Версии неизменяемые.
 
 ## Соглашения по координатам (единые для TS и Python)
@@ -66,7 +101,7 @@ infra/               docker-compose (полный и dev), Caddyfile, SeaweedFS
 - `studio-editor` — редактор плана, точки, подложки, привязка панорам.
 - `panorama-pipeline` — съёмка в браузере + склейка + тайлинг (обе стороны конвейера).
 - `geo-routing` — модель данных, граф маршрутов, проекции план↔панорама, этажи.
-- `backend-api` — API, авторизация, режимы доступа, публикация версий, S3, очередь.
+- `backend-api` — API, авторизация, режимы доступа, публикация версий, хранилище, очередь.
 - `mobile-qa` — проверка на мобильных вьюпортах и WebKit, бюджеты производительности; только отчёт, без правок.
 
 Независимые куски работы — параллельно разным агентам; файлы одного пакета одновременно правит только один агент.

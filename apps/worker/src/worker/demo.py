@@ -345,7 +345,12 @@ def main() -> None:
         encoding="utf-8",
         newline="\n",
     )
-    manifest = {"slug": "demo", "title": document.venue.name, "bundleUrl": "/demo/v1/bundle.json"}
+    manifest = {
+        "slug": "demo",
+        "title": document.venue.name,
+        "version": 1,
+        "bundleUrl": "/demo/v1/bundle.json",
+    }
     (viewer_demo / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
     )

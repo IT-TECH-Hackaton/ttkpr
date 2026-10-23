@@ -5,13 +5,17 @@
       "name": "viewer",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@ttkpr/viewer", "dev"],
-      "port": 5173
+      "port": 5173,
+      "env": { "HTTPS": "1" },
+      "url": "https://localhost:5173"
     },
     {
       "name": "studio",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@ttkpr/studio", "dev"],
-      "port": 5174
+      "port": 5174,
+      "env": { "HTTPS": "1" },
+      "url": "https://localhost:5174"
     }
   ]
 }

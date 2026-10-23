@@ -1,5 +1,6 @@
 {
   "slug": "demo",
   "title": "Демо-площадка хакатона",
+  "version": 1,
   "bundleUrl": "/demo/v1/bundle.json"
 }

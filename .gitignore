@@ -31,3 +31,5 @@ infra/volumes/
 .DS_Store
 Thumbs.db
 *.log
+test-results/
+playwright-report/

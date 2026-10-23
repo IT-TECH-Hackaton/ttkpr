@@ -1,15 +1,33 @@
 from functools import lru_cache
 
 from celery import Celery
+from fastapi import HTTPException, status
 
 from api.config import get_settings
+
+# Must match the queues the worker consumes (apps/worker/src/worker/celery_app.py):
+# routes configured only on the worker do not apply to messages sent from here.
+QUEUES = {
+    "worker.tasks.stitch_panorama": "heavy",
+    "worker.tasks.tile_panorama": "heavy",
+    "worker.tasks.build_map_version": "default",
+}
 
 
 @lru_cache
 def _celery() -> Celery:
-    return Celery(broker=get_settings().redis_url)
+    app = Celery(broker=get_settings().redis_url)
+    app.conf.broker_connection_timeout = 3
+    return app
 
 
 def enqueue(task_name: str, *args: str) -> None:
     """Tasks are sent by name; implementations live in apps/worker (worker.tasks)."""
-    _celery().send_task(task_name, args=list(args))
+    try:
+        _celery().send_task(
+            task_name, args=list(args), queue=QUEUES.get(task_name, "default"), retry=False
+        )
+    except Exception as exc:  # broker down: fail fast instead of hanging the request
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Очередь обработки недоступна, попробуйте позже"
+        ) from exc

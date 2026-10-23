@@ -15,6 +15,10 @@
 	handle /api/* {
 		reverse_proxy api:8000
 	}
+	# Tiles, previews and plan images (immutable, unguessable keys).
+	handle /media/* {
+		reverse_proxy api:8000
+	}
 }
 
 {$VIEWER_HOST:localhost} {

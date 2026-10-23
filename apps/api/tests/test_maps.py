@@ -57,7 +57,7 @@ async def test_publish_creates_version(client: AsyncClient, register: Register) 
     created = (await client.post("/api/maps", json={"title": "Выставка"})).json()
     first = await client.post(f"/api/maps/{created['id']}/publish")
     second = await client.post(f"/api/maps/{created['id']}/publish")
-    assert first.status_code == 202
+    assert first.status_code == 200
     assert (first.json()["number"], second.json()["number"]) == (1, 2)
 
 

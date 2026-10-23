@@ -11,6 +11,6 @@ COPY apps/api/pyproject.toml apps/api/pyproject.toml
 RUN mkdir -p apps/api/src/api && touch apps/api/src/api/__init__.py \
     && uv sync --frozen --no-dev --package worker
 
-RUN useradd --system --uid 10001 app
+RUN useradd --system --uid 10001 app && mkdir -p /data/storage && chown app /data/storage
 USER app
 CMD ["celery", "-A", "worker.celery_app", "worker", "-Q", "default,heavy", "--concurrency", "2", "--loglevel", "info"]

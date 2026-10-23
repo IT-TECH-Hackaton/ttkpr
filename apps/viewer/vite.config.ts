@@ -13,7 +13,15 @@ export default defineConfig({
     tailwindcss(),
     ...(https ? [basicSsl()] : []),
     VitePWA({
+      // Own service worker (src/sw.ts): saved maps are served offline before anything else.
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
       registerType: "autoUpdate",
+      injectManifest: {
+        globPatterns: ["**/*.{js,css,html,svg,png,webp,json,webmanifest}"],
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+      },
       manifest: {
         name: "Карта пространства",
         short_name: "Карта",
@@ -27,38 +35,16 @@ export default defineConfig({
           { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
-      workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
-        navigateFallback: "/index.html",
-        runtimeCaching: [
-          {
-            // The only mutable file of a published map: always try the network first.
-            urlPattern: ({ url }) => url.pathname.endsWith("/manifest.json"),
-            handler: "NetworkFirst",
-            options: { cacheName: "map-manifests", networkTimeoutSeconds: 3 },
-          },
-          {
-            // Versioned bundles and pano tiles are immutable.
-            urlPattern: ({ url }) => /\/(v\d+|pano-[^/]+)\//.test(url.pathname),
-            handler: "CacheFirst",
-            options: {
-              cacheName: "map-immutable",
-              expiration: { maxEntries: 2000, maxAgeSeconds: 60 * 60 * 24 * 30 },
-            },
-          },
-          {
-            urlPattern: ({ url }) => url.pathname.endsWith(".pbf"),
-            handler: "StaleWhileRevalidate",
-            options: { cacheName: "map-glyphs" },
-          },
-        ],
-      },
     }),
   ],
   server: {
     host: true,
     port: 5173,
-    proxy: { "/api": "http://localhost:8000" },
+    strictPort: true,
+    proxy: {
+      "/api": { target: "http://localhost:8000", xfwd: true },
+      "/media": { target: "http://localhost:8000", xfwd: true },
+    },
   },
   // Pre-bundle the lazily loaded panorama stack together, so three.js exists once.
   optimizeDeps: {

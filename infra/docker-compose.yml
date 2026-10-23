@@ -4,16 +4,18 @@ name: ttkpr
 x-backend-env: &backend-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ttk}:${POSTGRES_PASSWORD:-ttk}@postgres:5432/${POSTGRES_DB:-ttk}
   REDIS_URL: redis://redis:6379/0
-  S3_ENDPOINT: http://s3:8333
-  S3_BUCKET: ${S3_BUCKET:-ttk}
-  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-ttk-local}
-  S3_SECRET_KEY: ${S3_SECRET_KEY:-ttk-local-secret}
+  # Frames, panoramas and plan images; shared by api and worker, served under /media.
+  STORAGE_DIR: /data/storage
+  SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
 
 services:
   web:
     build:
       context: ..
       dockerfile: infra/web.Dockerfile
+      args:
+        VITE_VIEWER_URL: https://${VIEWER_HOST:-localhost}
+        VITE_STUDIO_URL: https://${STUDIO_HOST:-studio.localhost}
     environment:
       VIEWER_HOST: ${VIEWER_HOST:-localhost}
       STUDIO_HOST: ${STUDIO_HOST:-studio.localhost}
@@ -36,6 +38,8 @@ services:
       <<: *backend-env
       PUBLIC_BASE_URL: https://${VIEWER_HOST:-localhost}
       CORS_ORIGINS: '["https://${VIEWER_HOST:-localhost}", "https://${STUDIO_HOST:-studio.localhost}"]'
+    volumes:
+      - storage:/data/storage
     healthcheck:
       test:
         [
@@ -59,6 +63,8 @@ services:
       context: ..
       dockerfile: apps/worker/Dockerfile
     environment: *backend-env
+    volumes:
+      - storage:/data/storage
     depends_on:
       redis:
         condition: service_healthy
@@ -91,19 +97,8 @@ services:
       retries: 20
     restart: unless-stopped
 
-  s3:
-    # S3-compatible storage for local work (MinIO no longer publishes community images).
-    image: chrislusf/seaweedfs:4.48
-    command: ["server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/etc/seaweedfs/s3.json"]
-    volumes:
-      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
-      - s3-data:/data
-    ports:
-      - "8333:8333"
-    restart: unless-stopped
-
 volumes:
   caddy-data:
   postgres-data:
   redis-data:
-  s3-data:
+  storage:

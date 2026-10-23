@@ -3,9 +3,10 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from sqlalchemy import delete, select
 
+from api import ratelimit
 from api.deps import AppSettings, CurrentUser, DbSession
 from api.models import Session, User
-from api.schemas import LoginRequest, RegisterRequest, UserOut
+from api.schemas import LoginRequest, PasswordChange, ProfileUpdate, RegisterRequest, UserOut
 from api.security import hash_password, hash_token, new_session_token, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -31,8 +32,13 @@ async def _start_session(
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def register(
-    body: RegisterRequest, response: Response, db: DbSession, settings: AppSettings
+    body: RegisterRequest,
+    request: Request,
+    response: Response,
+    db: DbSession,
+    settings: AppSettings,
 ) -> User:
+    ratelimit.limit(request, "register", max_hits=10, window_s=3600)
     email = body.email.lower()
     if await db.scalar(select(User.id).where(User.email == email)):
         raise HTTPException(status.HTTP_409_CONFLICT, "Пользователь с таким email уже есть")
@@ -45,8 +51,13 @@ async def register(
 
 @router.post("/login", response_model=UserOut)
 async def login(
-    body: LoginRequest, response: Response, db: DbSession, settings: AppSettings
+    body: LoginRequest,
+    request: Request,
+    response: Response,
+    db: DbSession,
+    settings: AppSettings,
 ) -> User:
+    ratelimit.limit(request, "login", max_hits=10, window_s=300)
     user = await db.scalar(select(User).where(User.email == body.email.lower()))
     if user is None or not verify_password(user.password_hash, body.password):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный email или пароль")
@@ -68,3 +79,39 @@ async def logout(
 @router.get("/me", response_model=UserOut)
 async def me(user: CurrentUser) -> User:
     return user
+
+
+@router.patch("/me", response_model=UserOut)
+async def update_profile(body: ProfileUpdate, db: DbSession, user: CurrentUser) -> User:
+    user.name = body.name.strip()
+    await db.commit()
+    return user
+
+
+@router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    body: PasswordChange,
+    request: Request,
+    db: DbSession,
+    user: CurrentUser,
+    settings: AppSettings,
+) -> None:
+    """Also signs out every other device: a changed password must lock out a stolen session."""
+    ratelimit.limit(request, "password", max_hits=10, window_s=300)
+    if not verify_password(user.password_hash, body.current_password):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Текущий пароль указан неверно")
+    user.password_hash = hash_password(body.new_password)
+    current = hash_token(request.cookies.get(settings.session_cookie, ""))
+    await db.execute(
+        delete(Session).where(Session.user_id == user.id, Session.token_hash != current)
+    )
+    await db.commit()
+
+
+@router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
+async def logout_everywhere(
+    response: Response, db: DbSession, user: CurrentUser, settings: AppSettings
+) -> None:
+    await db.execute(delete(Session).where(Session.user_id == user.id))
+    await db.commit()
+    response.delete_cookie(settings.session_cookie, path="/")

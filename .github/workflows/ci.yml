@@ -24,6 +24,10 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - name: Offline PWA end-to-end (Chromium)
+        run: |
+          pnpm --filter @ttkpr/viewer exec playwright install --with-deps chromium
+          pnpm --filter @ttkpr/viewer e2e
 
   python:
     runs-on: ubuntu-latest

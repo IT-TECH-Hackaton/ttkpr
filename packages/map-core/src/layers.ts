@@ -7,7 +7,15 @@ export const SOURCE = {
   openings: "plan-openings",
   pois: "plan-pois",
   panos: "plan-panos",
+  connectors: "plan-connectors",
 } as const;
+
+export const CONNECTOR_LABELS: Record<string, string> = {
+  stairs: "Лестница",
+  elevator: "Лифт",
+  escalator: "Эскалатор",
+  ramp: "Пандус",
+};
 
 export const PLAN_FONT = ["Noto Sans Regular"];
 
@@ -27,6 +35,7 @@ export interface PlanCollections {
   openings: FeatureCollection<LineString, PlanProps>;
   pois: FeatureCollection<Point, PlanProps>;
   panos: FeatureCollection<Point, PlanProps>;
+  connectors: FeatureCollection<Point, PlanProps>;
 }
 
 function collection<G extends Polygon | LineString | Point>(
@@ -68,6 +77,22 @@ export function toCollections(bundle: MapBundle): PlanCollections {
         geometry: { type: "Point", coordinates: p.position },
         properties: { id: p.id, levelId: p.levelId, name: "", category: "pano" },
       })),
+    ),
+    // One point per level the stairs/lift serves.
+    connectors: collection(
+      (bundle.connectors ?? []).flatMap((c) =>
+        c.points.map((pt) => ({
+          type: "Feature" as const,
+          id: `${c.id}@${pt.levelId}`,
+          geometry: { type: "Point" as const, coordinates: pt.position },
+          properties: {
+            id: c.id,
+            levelId: pt.levelId,
+            name: c.name ?? CONNECTOR_LABELS[c.kind] ?? "",
+            category: c.kind,
+          },
+        })),
+      ),
     ),
   };
 }
@@ -139,6 +164,33 @@ export function planLayers(levelId: string): AddLayerObject[] {
       paint: { "text-color": "#5b6577", "text-halo-color": "#ffffff", "text-halo-width": 1 },
     },
     {
+      id: "connectors",
+      type: "circle",
+      source: SOURCE.connectors,
+      filter,
+      paint: {
+        "circle-radius": 9,
+        "circle-color": "#7c3aed",
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2,
+      },
+    },
+    {
+      id: "connectors-label",
+      type: "symbol",
+      source: SOURCE.connectors,
+      filter,
+      layout: {
+        "text-field": ["get", "name"],
+        "text-font": PLAN_FONT,
+        "text-size": 11,
+        "text-offset": [0, 1.3],
+        "text-anchor": "top",
+        "text-optional": true,
+      },
+      paint: { "text-color": "#5b21b6", "text-halo-color": "#ffffff", "text-halo-width": 1.5 },
+    },
+    {
       id: "panos",
       type: "circle",
       source: SOURCE.panos,
@@ -185,6 +237,8 @@ export const LEVEL_FILTERED_LAYERS = [
   "units-outline",
   "openings",
   "units-label",
+  "connectors",
+  "connectors-label",
   "panos",
   "pois",
   "pois-label",
