@@ -1,15 +1,20 @@
 import type { PanoramaOut } from "@ttkpr/api-client";
 import {
+  applyPlanTheme,
+  buildNavGraph,
   bundleBounds,
   DEFAULT_GLYPHS,
+  findTourRoute,
   LEVEL_FILTERED_LAYERS,
   type LonLat,
   levelFilter,
+  PLAN_FONT,
   planLayers,
   SOURCE,
   syncUnderlays,
   toCollections,
 } from "@ttkpr/map-core";
+import { useTheme } from "@ttkpr/ui";
 import type { Feature, FeatureCollection } from "geojson";
 import type {
   ExpressionSpecification,
@@ -19,13 +24,20 @@ import type {
 } from "maplibre-gl";
 import { Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useRef } from "react";
-import { TerraDraw, TerraDrawPolygonMode, TerraDrawRenderMode } from "terra-draw";
+import {
+  TerraDraw,
+  TerraDrawLineStringMode,
+  TerraDrawPolygonMode,
+  TerraDrawRenderMode,
+} from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { cornersPlacement, registerMap } from "../lib/mapView";
 import { DOOR_WIDTHS, doorOnWall, metersPerPixel, rectangleRing, snapPoint } from "../lib/snap";
 import { type LayerGroup, useDraft } from "../store";
 
 const STUDIO_PANOS = "studio-panos";
+// Route of the selected tour (preview of what visitors get), with numbered stops.
+const TOUR = "studio-tour";
 const PREVIEW = "draft-preview";
 const SNAP_PX = 12;
 const DOOR_PX = 28;
@@ -35,7 +47,7 @@ const LAYER_GROUPS: Record<LayerGroup, string[]> = {
   underlay: [], // underlay-* layers, handled separately
   rooms: ["units-fill", "units-outline", "selected-unit"],
   labels: ["units-label", "pois-label", "connectors-label"],
-  doors: ["openings", "selected-opening"],
+  doors: ["openings", "selected-opening", "paths", "paths-hit", "selected-path"],
   connectors: ["connectors", "connectors-label", "selected-connector", "connectors-hit"],
   points: ["pois", "pois-label", "pois-hit", "selected-poi"],
   panos: ["studio-panos", "studio-panos-hit", "studio-panos-selected"],
@@ -89,6 +101,9 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
   const selectedId = useDraft((s) => s.selectedId);
   const panoSpot = useDraft((s) => s.panoSpot);
   const hiddenLayers = useDraft((s) => s.hiddenLayers);
+  const { dark } = useTheme();
+  const darkRef = useRef(dark);
+  darkRef.current = dark;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -155,8 +170,10 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       map.addSource(SOURCE.pois, { type: "geojson", data: collections.pois });
       map.addSource(SOURCE.panos, { type: "geojson", data: collections.panos });
       map.addSource(SOURCE.connectors, { type: "geojson", data: collections.connectors });
+      map.addSource(SOURCE.paths, { type: "geojson", data: collections.paths });
       map.addSource(STUDIO_PANOS, { type: "geojson", data: EMPTY });
       map.addSource(PREVIEW, { type: "geojson", data: EMPTY });
+      map.addSource(TOUR, { type: "geojson", data: EMPTY });
 
       // The bundle's pano layer is replaced by live panoramas from the API.
       for (const layer of planLayers(initial.levelId)) {
@@ -221,6 +238,47 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
         });
       }
       map.addLayer({
+        id: "paths-hit",
+        type: "line",
+        source: SOURCE.paths,
+        filter: level,
+        paint: { "line-width": 18, "line-opacity": 0 },
+      });
+      highlight("selected-path", SOURCE.paths, "line", "#2563eb");
+      map.addLayer({
+        id: "tour-line",
+        type: "line",
+        source: TOUR,
+        filter: ["==", ["geometry-type"], "LineString"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#2563eb", "line-width": 5, "line-opacity": 0.8 },
+      });
+      map.addLayer({
+        id: "tour-stops",
+        type: "circle",
+        source: TOUR,
+        filter: ["==", ["geometry-type"], "Point"],
+        paint: {
+          "circle-radius": 11,
+          "circle-color": "#2563eb",
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
+        },
+      });
+      map.addLayer({
+        id: "tour-stops-label",
+        type: "symbol",
+        source: TOUR,
+        filter: ["==", ["geometry-type"], "Point"],
+        layout: {
+          "text-field": ["get", "n"],
+          "text-font": PLAN_FONT,
+          "text-size": 12,
+          "text-allow-overlap": true,
+        },
+        paint: { "text-color": "#ffffff" },
+      });
+      map.addLayer({
         id: "preview-fill",
         type: "fill",
         source: PREVIEW,
@@ -267,6 +325,7 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
         modes: [
           new TerraDrawRenderMode({ modeName: "static", styles: {} }),
           new TerraDrawPolygonMode({ snapping: { toCustom: (event) => snap(event).position } }),
+          new TerraDrawLineStringMode({ snapping: { toCustom: (event) => snap(event).position } }),
         ],
       });
       draw.start();
@@ -275,6 +334,8 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
         const feature = draw.getSnapshotFeature(id);
         if (feature?.geometry.type === "Polygon") {
           useDraft.getState().addUnit(feature.geometry.coordinates[0] as Position[]);
+        } else if (feature?.geometry.type === "LineString") {
+          useDraft.getState().addPath(feature.geometry.coordinates as Position[]);
         }
         draw.removeFeatures([id]);
         ignoreClicksUntil = performance.now() + 300;
@@ -329,6 +390,13 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
         s.setMovingPano(null);
         return;
       }
+      if (s.editingTourId) {
+        const hit = map.queryRenderedFeatures(event.point, { layers: ["pois-hit"] })[0];
+        const poiId = hit?.properties?.id as string | undefined;
+        if (poiId) s.addTourStop(poiId);
+        else s.setHint("Кликните по точке на плане — она станет следующей остановкой");
+        return;
+      }
       switch (s.tool) {
         case "pano":
           s.setPanoSpot(at);
@@ -362,12 +430,14 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
           return;
         }
         case "room":
+        case "path":
           return; // Terra Draw handles clicks
         case "select": {
           const layers = [
             "studio-panos-hit",
             "connectors-hit",
             "pois-hit",
+            "paths-hit",
             "openings",
             "units-fill",
           ].filter((l) => map.getLayer(l));
@@ -420,6 +490,13 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
     };
   }, []);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (map.isStyleLoaded()) applyPlanTheme(map, dark);
+    else map.once("load", () => applyPlanTheme(map, darkRef.current));
+  }, [dark]);
+
   // Document -> map sources and underlays.
   useEffect(() => {
     const map = mapRef.current;
@@ -431,6 +508,7 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
     (map.getSource(SOURCE.connectors) as GeoJSONSource | undefined)?.setData(
       collections.connectors,
     );
+    (map.getSource(SOURCE.paths) as GeoJSONSource | undefined)?.setData(collections.paths);
     syncUnderlays(map, doc.underlays ?? [], useDraft.getState().levelId);
     applyVisibility(map, useDraft.getState().hiddenLayers);
   }, [doc]);
@@ -447,7 +525,13 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
     for (const layer of LEVEL_FILTERED_LAYERS) {
       if (map.getLayer(layer)) map.setFilter(layer, levelFilter(layer, levelId));
     }
-    for (const layer of ["studio-panos", "studio-panos-hit", "pois-hit", "connectors-hit"]) {
+    for (const layer of [
+      "studio-panos",
+      "studio-panos-hit",
+      "pois-hit",
+      "connectors-hit",
+      "paths-hit",
+    ]) {
       if (map.getLayer(layer)) map.setFilter(layer, onLevel(levelId));
     }
     syncUnderlays(map, useDraft.getState().doc.underlays ?? [], levelId);
@@ -458,7 +542,9 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
     const map = mapRef.current;
     rectStart.current = null;
     (map?.getSource(PREVIEW) as GeoJSONSource | undefined)?.setData(EMPTY);
-    drawRef.current?.setMode(tool === "room" ? "polygon" : "static");
+    drawRef.current?.setMode(
+      tool === "room" ? "polygon" : tool === "path" ? "linestring" : "static",
+    );
     const canvas = map?.getCanvas();
     if (canvas) canvas.style.cursor = tool === "select" ? "" : "crosshair";
   }, [tool]);
@@ -471,11 +557,43 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       "selected-opening",
       "selected-poi",
       "selected-connector",
+      "selected-path",
       "studio-panos-selected",
     ]) {
-      map.setFilter(layer, byId(selectedId));
+      if (map.getLayer(layer)) map.setFilter(layer, byId(selectedId));
     }
   }, [selectedId]);
+
+  // The selected tour as visitors will walk it (current floor), stops numbered.
+  useEffect(() => {
+    const source = mapRef.current?.getSource(TOUR) as GeoJSONSource | undefined;
+    if (!source) return;
+    const tour = doc.tours?.find((t) => t.id === selectedId);
+    const stops = tour?.stops ?? [];
+    const route =
+      tour && stops.length >= 2
+        ? findTourRoute(buildNavGraph(doc), doc, stops, { avoidStairs: tour.avoidStairs })
+        : null;
+    const features: Feature[] = [];
+    for (const leg of route?.legs ?? []) {
+      if (leg.levelId !== levelId || leg.coordinates.length < 2) continue;
+      features.push({
+        type: "Feature",
+        geometry: { type: "LineString", coordinates: leg.coordinates },
+        properties: {},
+      });
+    }
+    stops.forEach((poiId, i) => {
+      const poi = doc.pois?.find((p) => p.id === poiId);
+      if (poi?.levelId !== levelId) return;
+      features.push({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: poi.position },
+        properties: { n: String(i + 1) },
+      });
+    });
+    source.setData({ type: "FeatureCollection", features });
+  }, [doc, selectedId, levelId]);
 
   useEffect(() => {
     const map = mapRef.current;

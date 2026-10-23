@@ -5,7 +5,7 @@ import { fromLocal, type LonLat, toLocal } from "../geo";
 import { visibleInside } from "./geometry";
 import { buildNavGraph, roomAt } from "./graph";
 import { panosAlongRoute, routeOnFloor, yawAlongRoute } from "./panoramas";
-import { findRoute, nextStep, unreachablePois } from "./route";
+import { findRoute, findTourRoute, nextStep, unreachablePois } from "./route";
 
 const demo: MapDocument = JSON.parse(
   readFileSync(new URL("../../../../fixtures/demo-map.json", import.meta.url), "utf-8"),
@@ -71,6 +71,24 @@ describe("routes on the demo venue", () => {
     expect(nextStep(route, 0)?.step).toBe(route.steps[1]);
     expect(nextStep(route, route.distanceM)?.step.kind).toBe("arrive");
     expect(nextStep(route, route.distanceM)?.inM).toBe(0);
+  });
+
+  it("joins an organizer's tour through several stops", () => {
+    const stops = ["p-registration", "p-coffee", "p-stand-a1", "p-mentors"];
+    const tour = findTourRoute(graph, demo, stops);
+    if (!tour) throw new Error("no tour");
+    const legs = stops
+      .slice(1)
+      .map((to, i) => findRoute(graph, demo, { poiId: stops[i] as string }, { poiId: to }));
+    const total = legs.reduce((sum, r) => sum + (r?.distanceM ?? 0), 0);
+    expect(tour.distanceM).toBeCloseTo(total, 6);
+    expect(tour.steps.filter((s) => s.kind === "stop").map((s) => s.text)).toEqual([
+      "Точка 2 из 4: «Кофе-поинт»",
+      "Точка 3 из 4: «Стенд A1»",
+    ]);
+    expect(tour.steps.filter((s) => s.kind === "start")).toHaveLength(1);
+    expect(tour.steps.at(-1)?.text).toBe("Вы на месте: «Менторы»");
+    expect(tour.legs.map((l) => l.levelId)).toEqual(["l1", "l2"]);
   });
 
   it("knows which taps land inside a room", () => {
@@ -160,5 +178,94 @@ describe("geometry rules", () => {
     const g = buildNavGraph(plan);
     expect(findRoute(g, plan, { poiId: "a" }, { poiId: "c" })).toBeNull();
     expect(unreachablePois(g, plan)).toEqual(["c"]);
+  });
+});
+
+// Two buildings with an entrance each and a walkway across the yard between them.
+function campus(): MapDocument {
+  const anchor: LonLat = [37.62, 55.754];
+  const at = (x: number, y: number) => fromLocal(anchor, [x, y]);
+  const box = (x0: number, y0: number, x1: number, y1: number) => ({
+    type: "Polygon" as const,
+    coordinates: [[at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1), at(x0, y0)]],
+  });
+  return {
+    venue: { id: "c", name: "Кампус", anchor },
+    levels: [{ id: "l1", name: "1 этаж", ordinal: 0 }],
+    units: [
+      { id: "a", levelId: "l1", name: "Корпус А", category: "hall", geometry: box(0, 0, 10, 10) },
+      { id: "b", levelId: "l1", name: "Корпус Б", category: "hall", geometry: box(40, 0, 50, 10) },
+    ],
+    openings: [
+      {
+        id: "ea",
+        levelId: "l1",
+        category: "entrance",
+        geometry: { type: "LineString", coordinates: [at(10, 4), at(10, 6)] },
+      },
+      {
+        id: "eb",
+        levelId: "l1",
+        category: "entrance",
+        geometry: { type: "LineString", coordinates: [at(40, 4), at(40, 6)] },
+      },
+    ],
+    paths: [
+      {
+        id: "walk",
+        geometry: { type: "LineString", coordinates: [at(11, 5), at(25, 12), at(39, 5)] },
+      },
+    ],
+    pois: [
+      { id: "pa", levelId: "l1", name: "Регистрация", category: "service", position: at(3, 5) },
+      { id: "pb", levelId: "l1", name: "Зал Б", category: "stand", position: at(47, 5) },
+    ],
+  };
+}
+
+describe("walkways between buildings", () => {
+  it("leaves one building, follows the walkway and enters the other", () => {
+    const plan = campus();
+    const route = findRoute(buildNavGraph(plan), plan, { poiId: "pa" }, { poiId: "pb" });
+    if (!route) throw new Error("no route across the yard");
+    // Along the bent walkway, not the straight 30 m gap.
+    // The walkway bends north (31.3 m instead of 28 m straight), so the trip is over 44 + 3 m.
+    expect(route.distanceM).toBeGreaterThan(47);
+    expect(route.steps.some((s) => s.text.startsWith("Пройдите через дверь в «Корпус Б»"))).toBe(
+      true,
+    );
+  });
+
+  it("has no way across without the walkway", () => {
+    const plan = { ...campus(), paths: [] };
+    expect(findRoute(buildNavGraph(plan), plan, { poiId: "pa" }, { poiId: "pb" })).toBeNull();
+  });
+});
+
+describe("3D walls", () => {
+  it("leaves gaps where the doors are", async () => {
+    const { wallFeatures } = await import("../walls");
+    const plan = campus();
+    const walls = wallFeatures(plan, "l1").features;
+    // Two boxes: 4 walls each, the entrance wall of each split in two around its door.
+    expect(walls).toHaveLength(10);
+    expect(walls.every((w) => w.properties.height > 2)).toBe(true);
+  });
+});
+
+describe("points placed in a panorama", () => {
+  it("a floor click lands where the plan point projects from (round trip)", async () => {
+    const { projectToPano, floorPointFromPano } = await import("../geo");
+    const pose = { xy: [10, 10] as [number, number], headingDeg: 35, cameraHeightM: 1.5 };
+    for (const point of [
+      [14, 7],
+      [3, 12],
+      [10, 18],
+    ] as [number, number][]) {
+      const { yaw, pitch } = projectToPano(pose, point, 0);
+      const back = floorPointFromPano(pose, yaw, pitch);
+      expect(back?.[0]).toBeCloseTo(point[0], 6);
+      expect(back?.[1]).toBeCloseTo(point[1], 6);
+    }
   });
 });

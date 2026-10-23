@@ -1,0 +1,25 @@
+# Build context for infra/*.Dockerfile and apps/*/Dockerfile (context = repo root).
+# Dependencies are installed inside the images; local data and secrets never go in.
+**/node_modules
+**/dist
+**/.turbo
+**/.vite
+**/coverage
+**/test-results
+**/playwright-report
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+data
+infra/volumes
+.git
+.github
+.claude
+**/.env
+**/.env.*
+!**/.env.example
+*.log
+*.pem
+*.key

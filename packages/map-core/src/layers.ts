@@ -8,6 +8,7 @@ export const SOURCE = {
   pois: "plan-pois",
   panos: "plan-panos",
   connectors: "plan-connectors",
+  paths: "plan-paths",
 } as const;
 
 export const CONNECTOR_LABELS: Record<string, string> = {
@@ -36,6 +37,7 @@ export interface PlanCollections {
   pois: FeatureCollection<Point, PlanProps>;
   panos: FeatureCollection<Point, PlanProps>;
   connectors: FeatureCollection<Point, PlanProps>;
+  paths: FeatureCollection<LineString, PlanProps>;
 }
 
 function collection<G extends Polygon | LineString | Point>(
@@ -94,7 +96,29 @@ export function toCollections(bundle: MapBundle): PlanCollections {
         })),
       ),
     ),
+    // Walkways without a level are outdoor: shown with the ground floor.
+    paths: collection(
+      (bundle.paths ?? []).map((path) => ({
+        type: "Feature" as const,
+        id: path.id,
+        geometry: { type: "LineString" as const, coordinates: path.geometry.coordinates },
+        properties: {
+          id: path.id,
+          levelId: path.levelId ?? groundLevelId(bundle),
+          name: "",
+          category: "path",
+        },
+      })),
+    ),
   };
+}
+
+/** The level closest to the ground (ordinal 0), where outdoor walkways are drawn. */
+export function groundLevelId(bundle: MapBundle): string {
+  const levels = [...(bundle.levels ?? [])].sort(
+    (a, b) => Math.abs(a.ordinal) - Math.abs(b.ordinal),
+  );
+  return levels[0]?.id ?? "";
 }
 
 export const UNIT_COLORS: Record<string, string> = {
@@ -138,6 +162,18 @@ export function planLayers(levelId: string): AddLayerObject[] {
       paint: {
         "line-color": "#5b6577",
         "line-width": ["interpolate", ["linear"], ["zoom"], 17, 1, 21, 3],
+      },
+    },
+    {
+      id: "paths",
+      type: "line",
+      source: SOURCE.paths,
+      filter,
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": "#c8b68f",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 17, 3, 21, 10],
+        "line-dasharray": [2, 1],
       },
     },
     {
@@ -235,6 +271,7 @@ export function planLayers(levelId: string): AddLayerObject[] {
 export const LEVEL_FILTERED_LAYERS = [
   "units-fill",
   "units-outline",
+  "paths",
   "openings",
   "units-label",
   "connectors",

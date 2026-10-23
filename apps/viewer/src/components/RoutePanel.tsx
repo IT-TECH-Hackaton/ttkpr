@@ -12,6 +12,8 @@ import { StepIcon } from "./StepIcon";
 
 interface Props {
   bundle: MapBundle;
+  /** Organizer's note on a tour. */
+  description?: string | null;
   route: Route | null;
   problem: string | null;
   /** Which end is still missing. */
@@ -28,6 +30,7 @@ interface Props {
 /** Bottom-sheet content of an open route: time, options, walkthrough, step list. */
 export function RoutePanel({
   bundle,
+  description,
   route,
   problem,
   missing,
@@ -71,9 +74,10 @@ export function RoutePanel({
     );
   }
 
-  const floors = route.legs.map((l) => levelName(l.levelId)).join(" → ");
+  const floors = [...new Set(route.legs.map((l) => levelName(l.levelId)))].join(" → ");
   return (
     <section aria-label="Маршрут" className="space-y-3">
+      {description && <p className="leading-relaxed text-muted">{description}</p>}
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-2xl font-semibold leading-none">{formatDuration(route.durationS)}</p>

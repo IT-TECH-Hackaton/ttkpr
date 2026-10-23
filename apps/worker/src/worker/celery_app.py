@@ -12,9 +12,13 @@ app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     task_track_started=True,
+    # A stuck or runaway stitch is killed instead of holding the heavy queue forever; the
+    # task marks the panorama failed on the soft limit. Children are recycled after big jobs.
+    task_soft_time_limit=900,
+    task_time_limit=1000,
+    worker_max_memory_per_child=3_000_000,  # KiB
     task_routes={
         "worker.tasks.stitch_panorama": {"queue": "heavy"},
         "worker.tasks.tile_panorama": {"queue": "heavy"},
-        "worker.tasks.build_map_version": {"queue": "default"},
     },
 )

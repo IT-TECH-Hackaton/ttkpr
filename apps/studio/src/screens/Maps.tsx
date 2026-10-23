@@ -15,7 +15,7 @@ import demoMap from "../../../../fixtures/demo-map.json";
 import { AppShell } from "../components/AppShell";
 import { MenuDivider, MenuItem, Popover } from "../components/Popover";
 import { unwrap } from "../lib/api";
-import { mapLink } from "../lib/links";
+import { localMapLink, mapLink } from "../lib/links";
 import { can, ROLE_LABELS } from "../lib/permissions";
 import { useMe } from "../lib/session";
 
@@ -140,7 +140,7 @@ function MapCard({ map, onDelete }: { map: MapSummary; onDelete: () => void }) {
                 disabled={!map.publishedNumber}
                 onClick={() => {
                   close();
-                  window.open(mapLink(map.slug), "_blank");
+                  window.open(localMapLink(map.slug), "_blank");
                 }}
               >
                 Открыть как посетитель
@@ -168,7 +168,9 @@ function MapCard({ map, onDelete }: { map: MapSummary; onDelete: () => void }) {
         <span
           className={cn(
             "rounded-full px-2.5 py-1",
-            map.publishedNumber ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800",
+            map.publishedNumber
+              ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200"
+              : "bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200",
           )}
         >
           {map.publishedNumber ? `Опубликована · v${map.publishedNumber}` : "Черновик"}

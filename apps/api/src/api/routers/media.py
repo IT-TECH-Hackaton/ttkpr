@@ -21,13 +21,15 @@ mimetypes.add_type("image/webp", ".webp")
 
 @router.get("/media/{key:path}")
 async def get_media(key: str) -> FileResponse:
-    # Raw capture frames are never served publicly.
-    if not key.startswith(SERVED_PREFIXES):
-        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    storage = get_storage()
     try:
-        path = get_storage().path(key)
+        path = storage.path(key)
     except ValueError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND) from exc
+    # Raw capture frames are never served publicly. Checked after resolving: a key like
+    # "panos/../captures/..." must not pass on its prefix.
+    if not path.relative_to(storage.root).as_posix().startswith(SERVED_PREFIXES):
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
     if not path.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     return FileResponse(path, headers={"Cache-Control": "public, max-age=31536000, immutable"})

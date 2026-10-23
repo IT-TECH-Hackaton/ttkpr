@@ -1,16 +1,38 @@
 import tailwindcss from "@tailwindcss/vite";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 // HTTPS=1 pnpm dev — needed to test camera/gyroscope from a phone on the LAN.
 const https = process.env.HTTPS === "1";
 
+// This server is the single entry point in dev: the visitor map at /, the studio at /studio/
+// (proxied to its own Vite server, see apps/studio/vite.config.ts), the API at /api and /media.
+const api = { target: "http://127.0.0.1:8000", xfwd: true };
+
+// A tunnel or another public name for the dev server (VITE_PUBLIC_URL=https://….example).
+const publicHost = process.env.VITE_PUBLIC_URL
+  ? new URL(process.env.VITE_PUBLIC_URL).hostname
+  : null;
+
+/** "/studio" -> "/studio/": the studio's base needs the trailing slash. */
+const studioSlash = (): Plugin => ({
+  name: "studio-trailing-slash",
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      if (req.url !== "/studio") return next();
+      res.writeHead(301, { Location: "/studio/" });
+      res.end();
+    });
+  },
+});
+
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    studioSlash(),
     ...(https ? [basicSsl()] : []),
     VitePWA({
       // Own service worker (src/sw.ts): saved maps are served offline before anything else.
@@ -41,9 +63,12 @@ export default defineConfig({
     host: true,
     port: 5173,
     strictPort: true,
+    ...(publicHost ? { allowedHosts: [publicHost] } : {}),
     proxy: {
-      "/api": { target: "http://localhost:8000", xfwd: true },
-      "/media": { target: "http://localhost:8000", xfwd: true },
+      "/api": api,
+      "/media": api,
+      // changeOrigin: the studio server only answers to its own host; ws: its hot reload.
+      "/studio/": { target: "http://127.0.0.1:5174", changeOrigin: true, ws: true },
     },
   },
   // Pre-bundle the lazily loaded panorama stack together, so three.js exists once.

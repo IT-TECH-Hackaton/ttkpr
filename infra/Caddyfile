@@ -1,5 +1,11 @@
-# Local: https://localhost (viewer) and https://studio.localhost (studio), Caddy's internal CA.
-# Production: set VIEWER_HOST / STUDIO_HOST to real domains and Caddy fetches certificates.
+# One origin for everything: the visitor map at /, the studio at /studio/, the API at /api and
+# /media. One certificate, same-origin cookies, and share links that match the page.
+# Local: https://localhost (Caddy's internal CA). Production: SITE_HOST=map.example.ru and Caddy
+# fetches a certificate.
+{
+	# Browsers send no SNI when the site is opened by IP (a LAN demo): use this site's cert.
+	default_sni {$SITE_HOST:localhost}
+}
 
 (security) {
 	header {
@@ -11,44 +17,44 @@
 	}
 }
 
-(api) {
+{$SITE_HOST:localhost} {
+	import security
+	encode zstd gzip
+
 	handle /api/* {
+		# Plan images and panoramas are at most 25 MB; refuse anything far bigger up front.
+		request_body {
+			max_size 30MB
+		}
 		reverse_proxy api:8000
 	}
 	# Tiles, previews and plan images (immutable, unguessable keys).
 	handle /media/* {
 		reverse_proxy api:8000
 	}
-}
 
-{$VIEWER_HOST:localhost} {
-	import security
-	encode zstd gzip
-	import api
+	redir /studio /studio/ permanent
+	handle_path /studio/* {
+		# The studio is never framed; the visitor map is embeddable (iframe on the venue's site).
+		header Content-Security-Policy "frame-ancestors 'none'"
+		root * /srv/studio
+		@immutable path /assets/*
+		header @immutable Cache-Control "public, max-age=31536000, immutable"
+		@shell path / /index.html
+		header @shell Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
 
 	handle {
 		root * /srv/viewer
 		# Versioned bundles, pano tiles and hashed assets never change.
 		@immutable path_regexp ^/(assets/|demo/v[0-9]+/|demo/pano-[^/]+/)
 		header @immutable Cache-Control "public, max-age=31536000, immutable"
-		# The manifest is the only mutable file of a published map.
-		@manifest path */manifest.json
-		header @manifest Cache-Control "no-cache"
-		try_files {path} /index.html
-		file_server
-	}
-}
-
-{$STUDIO_HOST:studio.localhost} {
-	import security
-	header Content-Security-Policy "frame-ancestors 'none'"
-	encode zstd gzip
-	import api
-
-	handle {
-		root * /srv/studio
-		@immutable path /assets/*
-		header @immutable Cache-Control "public, max-age=31536000, immutable"
+		# The manifest is the only mutable file of a published map; the shell and the service
+		# worker must be revalidated so updates reach visitors.
+		@fresh path */manifest.json /index.html /sw.js
+		header @fresh Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
 	}

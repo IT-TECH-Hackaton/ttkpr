@@ -25,7 +25,7 @@ import {
   useAutosave,
   useUnsavedGuard,
 } from "../lib/autosave";
-import { mapLink } from "../lib/links";
+import { localMapLink, mapLink } from "../lib/links";
 import { usePanoramaActions, usePanoramas } from "../lib/panos";
 import { can } from "../lib/permissions";
 import { useUploadPlan } from "../lib/uploadPlan";
@@ -140,7 +140,9 @@ function EditorLayout(props: LayoutProps) {
   const saveError = useDraft((s) => s.saveError);
   const { undo, redo } = useStore(useDraft.temporal);
   const [help, setHelp] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(
+    () => window.matchMedia("(min-width: 768px)").matches,
+  );
   const plan = useUploadPlan(map.id);
   const fileRef = useRef<HTMLInputElement>(null);
   const canEdit = can(map, "edit");
@@ -210,11 +212,11 @@ function EditorLayout(props: LayoutProps) {
           </p>
         )}
         {published !== null && (
-          <div className="pointer-events-auto flex max-w-xl items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-2 text-sm text-emerald-900 shadow-lg">
+          <div className="pointer-events-auto flex max-w-xl items-center gap-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 px-4 py-2 text-sm text-emerald-900 dark:text-emerald-200 shadow-lg">
             <span>
               Опубликована версия {published}. Ссылка не меняется:{" "}
               <a
-                href={mapLink(map.slug)}
+                href={localMapLink(map.slug)}
                 target="_blank"
                 rel="noreferrer"
                 className="font-medium underline"
@@ -228,7 +230,7 @@ function EditorLayout(props: LayoutProps) {
           </div>
         )}
         {staleBackup && (
-          <div className="pointer-events-auto flex max-w-xl flex-wrap items-center gap-2 rounded-2xl bg-sky-50 px-4 py-2 text-sm text-sky-900 shadow-lg">
+          <div className="pointer-events-auto flex max-w-xl flex-wrap items-center gap-2 rounded-2xl bg-sky-50 dark:bg-sky-950/60 px-4 py-2 text-sm text-sky-900 dark:text-sky-200 shadow-lg">
             <span className="flex-1">
               На этом устройстве есть несохранённые изменения от{" "}
               {new Date(staleBackup.savedAt).toLocaleString("ru-RU")}, а карту уже меняли.
@@ -242,7 +244,7 @@ function EditorLayout(props: LayoutProps) {
           </div>
         )}
         {saveState === "conflict" && (
-          <div className="pointer-events-auto flex max-w-xl items-center gap-3 rounded-2xl bg-amber-100 px-4 py-2 text-sm text-amber-900 shadow-lg">
+          <div className="pointer-events-auto flex max-w-xl items-center gap-3 rounded-2xl bg-amber-100 dark:bg-amber-950/60 px-4 py-2 text-sm text-amber-900 dark:text-amber-200 shadow-lg">
             <span className="flex-1">{saveError} Загрузите свежую версию.</span>
             <Button variant="secondary" className="min-h-9" onClick={props.onReload}>
               Обновить
@@ -250,7 +252,7 @@ function EditorLayout(props: LayoutProps) {
           </div>
         )}
         {plan.error && (
-          <p className="pointer-events-auto rounded-2xl bg-red-50 px-4 py-2 text-sm text-danger shadow-lg">
+          <p className="pointer-events-auto rounded-2xl bg-red-50 dark:bg-red-950/60 px-4 py-2 text-sm text-danger shadow-lg">
             {plan.error}
           </p>
         )}
@@ -262,7 +264,7 @@ function EditorLayout(props: LayoutProps) {
       {inspectorOpen ? (
         <aside
           aria-label="Свойства"
-          className="absolute bottom-24 right-3 top-20 z-10 flex w-[min(22rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl bg-bg shadow-2xl max-md:top-auto max-md:max-h-[45dvh]"
+          className="absolute bottom-24 right-3 top-20 z-10 flex w-[min(22rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl bg-bg shadow-2xl max-md:inset-x-3 max-md:bottom-[7.5rem] max-md:top-auto max-md:max-h-[50dvh] max-md:w-auto"
         >
           <div className="flex items-center justify-between border-b border-border px-4 py-2">
             <span className="text-sm font-medium text-muted">Свойства</span>
@@ -270,13 +272,13 @@ function EditorLayout(props: LayoutProps) {
               type="button"
               aria-label="Свернуть панель"
               onClick={() => setInspectorOpen(false)}
-              className="rounded-lg p-1 hover:bg-surface"
+              className="-mr-2 grid size-10 place-items-center rounded-lg hover:bg-surface"
             >
               <X className="size-4" />
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
-            <Inspector panos={panos.data ?? []} mapId={map.id} canEdit={canEdit} />
+            <Inspector panos={panos.data ?? []} mapId={map.id} slug={map.slug} canEdit={canEdit} />
           </div>
         </aside>
       ) : (
@@ -289,9 +291,9 @@ function EditorLayout(props: LayoutProps) {
         </button>
       )}
 
-      <div className="safe-bottom pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 px-3">
+      <div className="safe-bottom pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-2 px-3">
         <LayersButton />
-        <div className="flex min-w-0 flex-1 flex-col items-center gap-2">
+        <div className="flex min-w-0 flex-1 flex-col items-center gap-2 max-md:order-last max-md:w-full max-md:flex-none">
           {status && (
             <p className="max-w-full rounded-xl bg-slate-900/80 px-3 py-1.5 text-center text-xs text-white">
               {status}

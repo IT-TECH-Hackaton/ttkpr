@@ -15,11 +15,6 @@ class CamelModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
-class PointGeometry(CamelModel):
-    type: Literal["Point"] = "Point"
-    coordinates: LonLat
-
-
 class LineStringGeometry(CamelModel):
     type: Literal["LineString"] = "LineString"
     coordinates: list[LonLat] = Field(min_length=2)
@@ -167,6 +162,20 @@ class Underlay(CamelModel):
     opacity: float = Field(0.6, ge=0, le=1)
 
 
+class Tour(CamelModel):
+    """A route the organizer prepared: an excursion, a stand tour, the way from the entrance."""
+
+    id: str
+    name: str = Field(min_length=1, max_length=120)
+    description: str | None = Field(None, max_length=1000)
+    stops: list[str] = Field(
+        default_factory=list,
+        max_length=30,
+        description="POI ids in visiting order; visitors see tours with at least two",
+    )
+    avoid_stairs: bool = False
+
+
 class MapDocument(CamelModel):
     schema_version: int = SCHEMA_VERSION
     venue: Venue
@@ -178,4 +187,5 @@ class MapDocument(CamelModel):
     pois: list[Poi] = []
     panos: list[Pano] = []
     paths: list[PathLine] = []
+    tours: list[Tour] = []
     underlays: list[Underlay] = []

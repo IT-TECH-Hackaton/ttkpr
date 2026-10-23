@@ -41,7 +41,7 @@ export const zBodyUploadFrame = z.object({
  */
 export const zBodyUploadPanorama = z.object({
     file: z.string(),
-    levelId: z.string(),
+    levelId: z.string().min(1).max(64),
     lon: z.number(),
     lat: z.number(),
     headingDeg: z.number().optional().default(0)
@@ -138,7 +138,7 @@ export const zMapCreate = z.object({
  */
 export const zMapUpdate = z.object({
     title: z.string().min(1).max(200).nullish(),
-    slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/).nullish(),
+    slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/).nullish(),
     accessMode: zAccessMode.nullish()
 });
 
@@ -276,7 +276,7 @@ export const zPano = z.object({
  * PanoramaCreate
  */
 export const zPanoramaCreate = z.object({
-    levelId: z.string(),
+    levelId: z.string().min(1).max(64),
     position: z.tuple([z.number(), z.number()]),
     headingDeg: z.number().nullish(),
     title: z.string().max(200).nullish(),
@@ -324,7 +324,7 @@ export const zPanoramaOut = z.object({
  * PanoramaUpdate
  */
 export const zPanoramaUpdate = z.object({
-    levelId: z.string().nullish(),
+    levelId: z.string().min(1).max(64).nullish(),
     position: z.tuple([z.number(), z.number()]).nullish(),
     headingDeg: z.number().nullish(),
     title: z.string().max(200).nullish()
@@ -392,6 +392,50 @@ export const zRegisterRequest = z.object({
     email: z.email(),
     name: z.string().min(1).max(200),
     password: z.string().min(8).max(200)
+});
+
+/**
+ * StatCount
+ */
+export const zStatCount = z.object({
+    key: z.string(),
+    label: z.string(),
+    count: z.int()
+});
+
+/**
+ * StatDay
+ */
+export const zStatDay = z.object({
+    day: z.iso.date(),
+    views: z.int()
+});
+
+/**
+ * StatsOut
+ */
+export const zStatsOut = z.object({
+    days: z.array(zStatDay),
+    totals: z.record(z.string(), z.int()),
+    topPois: z.array(zStatCount),
+    topRoutes: z.array(zStatCount),
+    topTours: z.array(zStatCount),
+    searches: z.array(zStatCount),
+    misses: z.array(zStatCount),
+    private: z.boolean()
+});
+
+/**
+ * Tour
+ *
+ * A route the organizer prepared: an excursion, a stand tour, the way from the entrance.
+ */
+export const zTour = z.object({
+    id: z.string(),
+    name: z.string().min(1).max(120),
+    description: z.string().max(1000).nullish(),
+    stops: z.array(z.string()).max(30).optional(),
+    avoidStairs: z.boolean().optional().default(false)
 });
 
 /**
@@ -490,6 +534,7 @@ export const zMapDocument = z.object({
     pois: z.array(zPoi).optional().default([]),
     panos: z.array(zPano).optional().default([]),
     paths: z.array(zPathLine).optional().default([]),
+    tours: z.array(zTour).optional().default([]),
     underlays: z.array(zUnderlay).optional().default([])
 });
 
@@ -835,3 +880,25 @@ export const zGetBundlePath = z.object({
  * Successful Response
  */
 export const zGetBundleResponse = z.record(z.string(), z.unknown());
+
+export const zRecordEventsPath = z.object({
+    slug: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zRecordEventsResponse = z.void();
+
+export const zMapStatsPath = z.object({
+    map_id: z.uuid()
+});
+
+export const zMapStatsQuery = z.object({
+    days: z.int().optional().default(30)
+});
+
+/**
+ * Successful Response
+ */
+export const zMapStatsResponse = zStatsOut;

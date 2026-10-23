@@ -1443,6 +1443,95 @@
           }
         }
       }
+    },
+    "/api/public/maps/{slug}/events": {
+      "post": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Record Events",
+        "description": "Batch from navigator.sendBeacon (text/plain JSON: no CORS preflight, survives page close).\n\nBody: {\"events\": [{\"kind\": \"poi\", \"key\": \"p-coffee\"}, ...]}. Unknown kinds are dropped.",
+        "operationId": "record_events",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/maps/{map_id}/stats": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Map Stats",
+        "operationId": "map_stats",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Map Id"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 30,
+              "title": "Days"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1523,6 +1612,8 @@
           },
           "levelId": {
             "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
             "title": "Levelid"
           },
           "lon": {
@@ -1952,6 +2043,14 @@
             "title": "Paths",
             "default": []
           },
+          "tours": {
+            "items": {
+              "$ref": "#/components/schemas/Tour"
+            },
+            "type": "array",
+            "title": "Tours",
+            "default": []
+          },
           "underlays": {
             "items": {
               "$ref": "#/components/schemas/Underlay"
@@ -2048,14 +2147,14 @@
             "anyOf": [
               {
                 "type": "string",
-                "pattern": "^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$"
+                "pattern": "^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$"
               },
               {
                 "type": "null"
               }
             ],
             "title": "Slug",
-            "description": "Short link /m/{slug}: 3-40 latin letters, digits and dashes"
+            "description": "Short link /m/{slug}: 3-32 latin letters, digits and dashes"
           },
           "accessMode": {
             "anyOf": [
@@ -2307,6 +2406,8 @@
         "properties": {
           "levelId": {
             "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
             "title": "Levelid"
           },
           "position": {
@@ -2541,7 +2642,9 @@
           "levelId": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1
               },
               {
                 "type": "null"
@@ -2840,6 +2943,166 @@
           "password"
         ],
         "title": "RegisterRequest"
+      },
+      "StatCount": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "count"
+        ],
+        "title": "StatCount"
+      },
+      "StatDay": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "views": {
+            "type": "integer",
+            "title": "Views"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "views"
+        ],
+        "title": "StatDay"
+      },
+      "StatsOut": {
+        "properties": {
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/StatDay"
+            },
+            "type": "array",
+            "title": "Days"
+          },
+          "totals": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Totals",
+            "description": "Per kind: view, poi, route, pano, tour, search, miss"
+          },
+          "topPois": {
+            "items": {
+              "$ref": "#/components/schemas/StatCount"
+            },
+            "type": "array",
+            "title": "Toppois"
+          },
+          "topRoutes": {
+            "items": {
+              "$ref": "#/components/schemas/StatCount"
+            },
+            "type": "array",
+            "title": "Toproutes"
+          },
+          "topTours": {
+            "items": {
+              "$ref": "#/components/schemas/StatCount"
+            },
+            "type": "array",
+            "title": "Toptours"
+          },
+          "searches": {
+            "items": {
+              "$ref": "#/components/schemas/StatCount"
+            },
+            "type": "array",
+            "title": "Searches"
+          },
+          "misses": {
+            "items": {
+              "$ref": "#/components/schemas/StatCount"
+            },
+            "type": "array",
+            "title": "Misses",
+            "description": "Searches that found nothing"
+          },
+          "private": {
+            "type": "boolean",
+            "title": "Private"
+          }
+        },
+        "type": "object",
+        "required": [
+          "days",
+          "totals",
+          "topPois",
+          "topRoutes",
+          "topTours",
+          "searches",
+          "misses",
+          "private"
+        ],
+        "title": "StatsOut"
+      },
+      "Tour": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "stops": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Stops",
+            "description": "POI ids in visiting order; visitors see tours with at least two"
+          },
+          "avoidStairs": {
+            "type": "boolean",
+            "title": "Avoidstairs",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Tour",
+        "description": "A route the organizer prepared: an excursion, a stand tour, the way from the entrance."
       },
       "Underlay": {
         "properties": {

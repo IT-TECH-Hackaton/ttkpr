@@ -8,6 +8,7 @@ import {
   DoorOpen,
   Flag,
   type LucideIcon,
+  MapPin,
   MoveUp,
   Undo2,
 } from "lucide-react";
@@ -15,7 +16,10 @@ import {
 function iconFor(step: RouteStep): { Icon: LucideIcon; tone: string } {
   switch (step.kind) {
     case "start":
-      return { Icon: MoveUp, tone: "bg-green-100 text-green-700" };
+      return {
+        Icon: MoveUp,
+        tone: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
+      };
     case "door":
       return { Icon: DoorOpen, tone: "bg-surface text-fg" };
     case "turn":
@@ -30,10 +34,15 @@ function iconFor(step: RouteStep): { Icon: LucideIcon; tone: string } {
     case "floor":
       return {
         Icon: step.text.startsWith("Поднимитесь") ? ArrowUp : ArrowDown,
-        tone: "bg-violet-100 text-violet-700",
+        tone: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
+      };
+    case "stop":
+      return {
+        Icon: MapPin,
+        tone: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
       };
     case "arrive":
-      return { Icon: Flag, tone: "bg-red-100 text-red-700" };
+      return { Icon: Flag, tone: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" };
     default:
       return { Icon: MoveUp, tone: "bg-surface text-fg" };
   }

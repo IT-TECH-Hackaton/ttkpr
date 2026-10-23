@@ -46,7 +46,9 @@ export function InviteScreen() {
       {accept.isPending && <p className="text-muted">Присоединяемся…</p>}
       {accept.error && (
         <>
-          <p className="rounded-xl bg-red-50 p-3 text-danger">{accept.error.message}</p>
+          <p className="rounded-xl bg-red-50 dark:bg-red-950/60 p-3 text-danger">
+            {accept.error.message}
+          </p>
           <Button variant="secondary" onClick={() => navigate({ to: "/" })}>
             К моим картам
           </Button>

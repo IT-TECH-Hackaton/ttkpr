@@ -3,6 +3,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func, select, update
 
 from api import capture_tokens
@@ -28,7 +29,7 @@ from api.schemas import (
     MapUpdate,
     PublishOut,
 )
-from api.security import new_slug
+from api.slugs import RESERVED, free_slug
 from api.storage import get_storage
 from api.uploads import ensure_image, read_limited, reencode_webp
 from map_schema.models import MapDocument, Pano, PanoStatus, PanoTiles, Venue
@@ -72,7 +73,7 @@ async def list_maps(db: DbSession, user: CurrentUser) -> list[MapSummary]:
 
 @router.post("", response_model=MapSummary, status_code=status.HTTP_201_CREATED)
 async def create_map(body: MapCreate, db: DbSession, user: CurrentUser) -> MapSummary:
-    slug = new_slug().lower().replace("_", "-").strip("-")
+    slug = await free_slug(db, body.title)
     document = MapDocument(venue=Venue(id=slug, name=body.title, anchor=body.anchor))
     new_map = Map(
         slug=slug, title=body.title, draft=document.model_dump(mode="json", by_alias=True)
@@ -99,7 +100,7 @@ async def update_map(
     found = await member_map(db, map_id, user, Permission.SHARE if sharing else Permission.EDIT)
     _, role = await member_access(db, map_id, user)
     if body.slug and body.slug != found.slug:
-        if await db.scalar(select(Map.id).where(Map.slug == body.slug)):
+        if body.slug in RESERVED or await db.scalar(select(Map.id).where(Map.slug == body.slug)):
             raise HTTPException(status.HTTP_409_CONFLICT, "Такой адрес уже занят")
         found.slug = body.slug
     if body.title:
@@ -170,6 +171,7 @@ def _bundle_pano(pano: Panorama) -> Pano:
 async def publish(map_id: uuid.UUID, db: DbSession, user: CurrentUser) -> PublishOut:
     """Freezes draft + ready panoramas into a new immutable version; the link stays the same."""
     found = await member_map(db, map_id, user, Permission.PUBLISH)
+    await db.execute(select(Map.id).where(Map.id == map_id).with_for_update())
     panoramas = await db.scalars(
         select(Panorama).where(Panorama.map_id == map_id, Panorama.status == PanoramaStatus.READY)
     )
@@ -198,7 +200,7 @@ async def upload_asset(
     await member_map(db, map_id, user, Permission.EDIT)
     data = await read_limited(file)
     ensure_image(data)
-    webp, width, height = reencode_webp(data)
+    webp, width, height = await run_in_threadpool(reencode_webp, data)
     url = get_storage().put(f"maps/{map_id}/assets/{uuid.uuid4()}.webp", webp)
     return AssetOut(url=url, width=width, height=height)
 

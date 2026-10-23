@@ -3,7 +3,9 @@ import type {
   Level,
   MapDocument,
   Opening,
+  PathLine,
   Poi,
+  Tour,
   Underlay,
   Unit,
 } from "@ttkpr/api-client";
@@ -11,7 +13,7 @@ import { CONNECTOR_LABELS, categoryLabel, sortedLevels } from "@ttkpr/map-core";
 import { temporal } from "zundo";
 import { create } from "zustand";
 
-export type Tool = "select" | "rect" | "room" | "door" | "stairs" | "poi" | "pano";
+export type Tool = "select" | "rect" | "room" | "door" | "stairs" | "poi" | "path" | "pano";
 export type DoorType = "door" | "double" | "passage" | "entrance";
 export type ConnectorKind = Connector["kind"];
 export type LayerGroup =
@@ -40,6 +42,8 @@ interface DraftState {
   panoSpot: Position | null;
   /** Pano being moved: the next click on the plan sets its position. */
   movingPanoId: string | null;
+  /** Tour whose stops are being picked: clicks on points add them in order. */
+  editingTourId: string | null;
   /** Tool options (toolbar dropdowns) and view settings. */
   doorType: DoorType;
   connectorKind: ConnectorKind;
@@ -67,9 +71,18 @@ interface DraftState {
   setHint: (hint: string | null) => void;
 
   addUnit: (ring: Position[]) => void;
+  /** Many rooms at once (plan recognition): one undo step. */
+  addUnits: (rings: Position[][]) => void;
   addPoi: (position: Position) => void;
   addOpening: (a: Position, b: Position) => void;
   addConnector: (position: Position) => void;
+  addPath: (coordinates: Position[]) => void;
+  addTour: () => void;
+  updateTour: (id: string, patch: Partial<Tour>) => void;
+  addTourStop: (poiId: string) => void;
+  moveTourStop: (id: string, index: number, delta: -1 | 1) => void;
+  removeTourStop: (id: string, index: number) => void;
+  setEditingTour: (id: string | null) => void;
   updateUnit: (id: string, patch: Partial<Unit>) => void;
   updatePoi: (id: string, patch: Partial<Poi>) => void;
   remove: (id: string) => void;
@@ -104,6 +117,7 @@ export const useDraft = create<DraftState>()(
       selectedId: null,
       panoSpot: null,
       movingPanoId: null,
+      editingTourId: null,
       doorType: "door",
       connectorKind: "stairs",
       poiCategory: "stand",
@@ -126,6 +140,7 @@ export const useDraft = create<DraftState>()(
           selectedId: null,
           panoSpot: null,
           movingPanoId: null,
+          editingTourId: null,
         });
         useDraft.temporal.getState().clear();
       },
@@ -133,8 +148,20 @@ export const useDraft = create<DraftState>()(
       setSaveState: (saveState, error) => set({ saveState, saveError: error ?? null }),
       setLevel: (levelId) => set({ levelId, selectedId: null, panoSpot: null }),
       setTool: (tool) =>
-        set({ tool, selectedId: null, panoSpot: null, movingPanoId: null, hint: null }),
-      select: (selectedId) => set({ selectedId, panoSpot: null }),
+        set({
+          tool,
+          selectedId: null,
+          panoSpot: null,
+          movingPanoId: null,
+          editingTourId: null,
+          hint: null,
+        }),
+      select: (selectedId) =>
+        set((s) => ({
+          selectedId,
+          panoSpot: null,
+          editingTourId: selectedId === s.editingTourId ? s.editingTourId : null,
+        })),
       setPanoSpot: (panoSpot) => set({ panoSpot, selectedId: null }),
       setMovingPano: (movingPanoId) => set({ movingPanoId }),
       setOptions: (patch) => set(patch),
@@ -158,6 +185,19 @@ export const useDraft = create<DraftState>()(
           };
           // The tool stays active: draw room after room, rename them in the panel.
           return { doc: { ...s.doc, units: [...(s.doc.units ?? []), unit] }, selectedId: unit.id };
+        }),
+      addUnits: (rings) =>
+        set((s) => {
+          const start = (s.doc.units?.length ?? 0) + 1;
+          const units: Unit[] = rings.map((ring, i) => ({
+            id: newId("u"),
+            levelId: s.levelId,
+            name: `Помещение ${start + i}`,
+            category: "room",
+            walkable: true,
+            geometry: { type: "Polygon", coordinates: [ring] },
+          }));
+          return { doc: { ...s.doc, units: [...(s.doc.units ?? []), ...units] } };
         }),
       addPoi: (position) =>
         set((s) => {
@@ -216,6 +256,68 @@ export const useDraft = create<DraftState>()(
             selectedId: connector.id,
           };
         }),
+      addPath: (coordinates) =>
+        set((s) => {
+          const path: PathLine = {
+            id: newId("w"),
+            levelId: s.levelId,
+            geometry: { type: "LineString", coordinates },
+          };
+          return { doc: { ...s.doc, paths: [...(s.doc.paths ?? []), path] }, selectedId: path.id };
+        }),
+      addTour: () =>
+        set((s) => {
+          const tour: Tour = {
+            id: newId("t"),
+            name: `Маршрут ${(s.doc.tours?.length ?? 0) + 1}`,
+            stops: [],
+          };
+          return {
+            doc: { ...s.doc, tours: [...(s.doc.tours ?? []), tour] },
+            selectedId: tour.id,
+            editingTourId: tour.id,
+            tool: "select",
+          };
+        }),
+      updateTour: (id, patch) =>
+        set((s) => ({
+          doc: { ...s.doc, tours: s.doc.tours?.map((t) => (t.id === id ? { ...t, ...patch } : t)) },
+        })),
+      addTourStop: (poiId) =>
+        set((s) => ({
+          doc: {
+            ...s.doc,
+            tours: s.doc.tours?.map((t) => {
+              const stops = t.stops ?? [];
+              if (t.id !== s.editingTourId || stops.at(-1) === poiId || stops.length >= 30)
+                return t;
+              return { ...t, stops: [...stops, poiId] };
+            }),
+          },
+        })),
+      moveTourStop: (id, index, delta) =>
+        set((s) => ({
+          doc: {
+            ...s.doc,
+            tours: s.doc.tours?.map((t) => {
+              const stops = [...(t.stops ?? [])];
+              const to = index + delta;
+              if (t.id !== id || to < 0 || to >= stops.length) return t;
+              [stops[index], stops[to]] = [stops[to] as string, stops[index] as string];
+              return { ...t, stops };
+            }),
+          },
+        })),
+      removeTourStop: (id, index) =>
+        set((s) => ({
+          doc: {
+            ...s.doc,
+            tours: s.doc.tours?.map((t) =>
+              t.id === id ? { ...t, stops: (t.stops ?? []).filter((_, i) => i !== index) } : t,
+            ),
+          },
+        })),
+      setEditingTour: (editingTourId) => set({ editingTourId, tool: "select" }),
       updateUnit: (id, patch) =>
         set((s) => ({
           doc: { ...s.doc, units: s.doc.units?.map((u) => (u.id === id ? { ...u, ...patch } : u)) },
@@ -233,8 +335,14 @@ export const useDraft = create<DraftState>()(
             openings: s.doc.openings?.filter((o) => o.id !== id),
             connectors: s.doc.connectors?.filter((c) => c.id !== id),
             underlays: s.doc.underlays?.filter((u) => u.id !== id),
+            paths: s.doc.paths?.filter((p) => p.id !== id),
+            // A removed point leaves every tour; a removed tour is gone.
+            tours: s.doc.tours
+              ?.filter((t) => t.id !== id)
+              .map((t) => ({ ...t, stops: (t.stops ?? []).filter((poiId) => poiId !== id) })),
           },
           selectedId: null,
+          editingTourId: s.editingTourId === id ? null : s.editingTourId,
         })),
       addLevel: () =>
         set((s) => {

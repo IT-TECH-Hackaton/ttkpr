@@ -1,18 +1,35 @@
 import type { PanoramaOut } from "@ttkpr/api-client";
 import {
+  buildNavGraph,
   CONNECTOR_LABELS,
+  findTourRoute,
+  formatDistance,
+  formatDuration,
   POI_CATEGORIES,
   plural,
   sortedLevels,
   UNIT_COLORS,
 } from "@ttkpr/map-core";
 import { Button } from "@ttkpr/ui";
-import { type ReactNode, useRef, useState } from "react";
+import {
+  ChevronDown,
+  ChevronUp,
+  MousePointerClick,
+  Plus,
+  Route as RouteIcon,
+  Wand2,
+  X,
+} from "lucide-react";
+import { lazy, type ReactNode, Suspense, useMemo, useRef, useState } from "react";
+import { detectRooms, placeRing } from "../lib/autoPlan";
+import { mapLink } from "../lib/links";
 import { cornersPlacement, placementCorners, viewCenter } from "../lib/mapView";
 import { usePanoramaActions } from "../lib/panos";
 import { useDraft } from "../store";
 import { CaptureQrDialog } from "./CaptureQrDialog";
 import { RouteCheck } from "./RouteCheck";
+
+const PanoPlacer = lazy(() => import("./PanoPlacer"));
 
 const UNIT_CATEGORY_LABELS: Record<string, string> = {
   room: "Помещение",
@@ -22,7 +39,7 @@ const UNIT_CATEGORY_LABELS: Record<string, string> = {
   restroom: "Туалет",
   stairs: "Лестница",
   elevator: "Лифт",
-  outdoor: "Улица",
+  outdoor: "Территория, улица",
   nonpublic: "Служебное",
 };
 
@@ -67,10 +84,13 @@ function Field({
 export function Inspector({
   panos,
   mapId,
+  slug,
   canEdit,
 }: {
   panos: PanoramaOut[];
   mapId: string;
+  /** For tour links (/m/{slug}?tour=…). */
+  slug: string;
   canEdit: boolean;
 }) {
   const doc = useDraft((s) => s.doc);
@@ -82,6 +102,8 @@ export function Inspector({
   const opening = doc.openings?.find((o) => o.id === selectedId);
   const underlay = doc.underlays?.find((u) => u.id === selectedId);
   const connector = doc.connectors?.find((c) => c.id === selectedId);
+  const tour = doc.tours?.find((t) => t.id === selectedId);
+  const path = doc.paths?.find((w) => w.id === selectedId);
   const pano = panos.find((p) => p.id === selectedId);
 
   let content: ReactNode;
@@ -91,7 +113,18 @@ export function Inspector({
   else if (poi) content = <PoiPanel id={poi.id} />;
   else if (underlay) content = <UnderlayPanel id={underlay.id} />;
   else if (connector) content = <ConnectorPanel id={connector.id} />;
-  else if (opening) {
+  else if (tour) content = <TourPanel id={tour.id} slug={slug} />;
+  else if (path) {
+    content = (
+      <Section title="Дорожка">
+        <p className="text-sm text-muted">
+          {Math.round(lineLength(path.geometry.coordinates))} м. По дорожке пройдут маршруты: её
+          концы у входов ведут внутрь зданий, изгибы внутри помещений соединяются с ними.
+        </p>
+        <DeleteButton id={path.id} />
+      </Section>
+    );
+  } else if (opening) {
     content = (
       <Section title="Дверь / проход">
         <p className="text-sm text-muted">
@@ -321,8 +354,48 @@ function UnderlayPanel({ id }: { id: string }) {
       >
         Сюда (в центр экрана)
       </Button>
+      <AutoRooms underlayId={id} />
       <DeleteButton id={id} />
     </Section>
+  );
+}
+
+/** "Распознать комнаты": room outlines from the plan image, added as one undoable step. */
+function AutoRooms({ underlayId }: { underlayId: string }) {
+  const [state, setState] = useState<{ busy: boolean; message: string | null }>({
+    busy: false,
+    message: null,
+  });
+  const run = async () => {
+    const { doc, addUnits } = useDraft.getState();
+    const underlay = doc.underlays?.find((u) => u.id === underlayId);
+    if (!underlay) return;
+    setState({ busy: true, message: null });
+    try {
+      const rooms = await detectRooms(underlay.url);
+      const rings = rooms.map((room) => placeRing(room.ring, underlay.coordinates));
+      addUnits(rings);
+      setState({
+        busy: false,
+        message: rings.length
+          ? `Добавлено: ${plural(rings.length, ["помещение", "помещения", "помещений"])}. Проверьте контуры, назовите комнаты и поставьте двери.`
+          : "Замкнутых помещений не нашлось: нужен чёткий план с тёмными стенами.",
+      });
+    } catch {
+      setState({ busy: false, message: "Не удалось прочитать картинку плана" });
+    }
+  };
+  return (
+    <div className="space-y-2 rounded-xl border border-dashed border-border p-3">
+      <Button className="w-full" disabled={state.busy} onClick={() => void run()}>
+        <Wand2 className="size-4" aria-hidden />
+        {state.busy ? "Распознаём…" : "Распознать комнаты по плану"}
+      </Button>
+      <p className="text-xs text-muted">
+        {state.message ??
+          "Тёмные линии станут стенами, замкнутые области — помещениями. Сначала совместите подложку с картой. Отменить — Ctrl+Z."}
+      </p>
+    </div>
   );
 }
 
@@ -339,6 +412,7 @@ function PanoPanel({
   const [heading, setHeading] = useState(pano.headingDeg);
   const moving = useDraft((s) => s.movingPanoId === pano.id);
   const preview = pano.tiles?.previewUrl;
+  const [placing, setPlacing] = useState(false);
   const saveHeading = () => actions.update.mutate({ id: pano.id, patch: { headingDeg: heading } });
 
   return (
@@ -347,8 +421,23 @@ function PanoPanel({
         {STATUS_LABELS[pano.status] ?? pano.status}
         {(pano.status === "processing" || pano.status === "uploading") && ` · ${pano.progress}%`}
       </p>
-      {pano.error && <p className="rounded-xl bg-red-50 p-3 text-sm text-danger">{pano.error}</p>}
+      {pano.error && (
+        <p className="rounded-xl bg-red-50 dark:bg-red-950/60 p-3 text-sm text-danger">
+          {pano.error}
+        </p>
+      )}
       {preview && <img src={preview} alt="Превью панорамы" className="w-full rounded-xl" />}
+      {canEdit && pano.status === "ready" && pano.tiles && (
+        <Button className="w-full" onClick={() => setPlacing(true)}>
+          <MousePointerClick className="size-4" aria-hidden />
+          Поставить точки в панораме
+        </Button>
+      )}
+      {placing && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 bg-black" />}>
+          <PanoPlacer pano={pano} onClose={() => setPlacing(false)} />
+        </Suspense>
+      )}
       {pano.quality && (
         <p className="text-xs text-muted">
           Кадров: {String(pano.quality.frames)} · совпадений: {String(pano.quality.matches)} ·
@@ -485,6 +574,8 @@ function OverviewPanel({ panos }: { panos: PanoramaOut[] }) {
         <RouteCheck />
       </Section>
 
+      <ToursSection />
+
       {underlays.length > 0 && (
         <Section title="Подложка">
           {underlays.map((u, i) => (
@@ -497,14 +588,224 @@ function OverviewPanel({ panos }: { panos: PanoramaOut[] }) {
 
       <Section title="Быстрый старт">
         <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted">
-          <li>Загрузите схему здания (кнопка с картинкой) или рисуйте с нуля.</li>
+          <li>
+            Загрузите схему здания (кнопка с картинкой) и нажмите «Распознать комнаты» — или рисуйте
+            с нуля.
+          </li>
           <li>«Комната»: два клика по углам — следующая прилипнет к соседней.</li>
           <li>«Дверь»: наведите на стену и кликните.</li>
           <li>«Точка»: выберите категорию в стрелке и расставляйте подряд.</li>
+          <li>«Дорожка»: соедините входы зданий через двор или улицу.</li>
           <li>«Панорама»: клик в месте съёмки → QR для телефона.</li>
+          <li>«Маршруты для гостей»: экскурсия по точкам со ссылкой и QR.</li>
           <li>Нажмите «Опубликовать».</li>
         </ol>
       </Section>
     </div>
+  );
+}
+
+function lineLength(coordinates: [number, number][]): number {
+  let total = 0;
+  for (let i = 1; i < coordinates.length; i++) {
+    const [lon1, lat1] = coordinates[i - 1] as [number, number];
+    const [lon2, lat2] = coordinates[i] as [number, number];
+    const k = Math.cos((((lat1 + lat2) / 2) * Math.PI) / 180);
+    total += Math.hypot((lon2 - lon1) * k, lat2 - lat1) * 111_320;
+  }
+  return total;
+}
+
+const NO_TOURS: never[] = [];
+const NO_STOPS: string[] = [];
+
+/** Organizer's routes in the overview: excursions, stand tours, the way from the entrance. */
+function ToursSection() {
+  // Select the array itself: `?? []` inside the selector would be a new value on every read.
+  const tours = useDraft((s) => s.doc.tours) ?? NO_TOURS;
+  const { addTour, select } = useDraft.getState();
+  return (
+    <Section title="Маршруты для гостей">
+      <p className="text-sm text-muted">
+        Экскурсия, обход стендов, путь от входа до зала — гости откроют его по ссылке или QR и
+        пройдут по плану и панорамам.
+      </p>
+      {tours.length > 0 && (
+        <ul className="divide-y divide-border rounded-xl border border-border text-sm">
+          {tours.map((tour) => (
+            <li key={tour.id}>
+              <button
+                type="button"
+                onClick={() => select(tour.id)}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-surface"
+              >
+                <RouteIcon className="size-4 shrink-0 text-accent" aria-hidden />
+                <span className="min-w-0 flex-1 truncate font-medium">{tour.name}</span>
+                <span className="shrink-0 text-muted">
+                  {plural(tour.stops?.length ?? 0, ["точка", "точки", "точек"])}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Button variant="secondary" className="w-full" onClick={addTour}>
+        <Plus className="size-4" aria-hidden />
+        Новый маршрут
+      </Button>
+    </Section>
+  );
+}
+
+function TourPanel({ id, slug }: { id: string; slug: string }) {
+  const doc = useDraft((s) => s.doc);
+  const editing = useDraft((s) => s.editingTourId === id);
+  const { updateTour, moveTourStop, removeTourStop, setEditingTour } = useDraft.getState();
+  const [copied, setCopied] = useState(false);
+  const tour = doc.tours?.find((t) => t.id === id);
+  const stops = tour?.stops ?? NO_STOPS;
+  // Same computation as the viewer, on the draft: what guests will get after publishing.
+  const route = useMemo(
+    () =>
+      tour && stops.length >= 2
+        ? findTourRoute(buildNavGraph(doc), doc, stops, { avoidStairs: tour.avoidStairs })
+        : null,
+    [doc, tour, stops],
+  );
+  if (!tour) return null;
+  // A point may be visited twice: key = id + how many times it came before.
+  const stopKeys = stops.map(
+    (poiId, i) => `${poiId}:${stops.slice(0, i).filter((s) => s === poiId).length}`,
+  );
+  const poiName = (poiId: string) =>
+    doc.pois?.find((p) => p.id === poiId)?.name ?? "Удалённая точка";
+  const link = `${mapLink(slug)}?tour=${encodeURIComponent(tour.id)}`;
+
+  return (
+    <Section title="Маршрут для гостей">
+      <Field label="Название" htmlFor="tour-name">
+        <input
+          id="tour-name"
+          className={field}
+          value={tour.name}
+          maxLength={120}
+          onChange={(e) => updateTour(tour.id, { name: e.target.value })}
+        />
+      </Field>
+      <Field label="Описание" htmlFor="tour-description">
+        <textarea
+          id="tour-description"
+          className={`${field} h-20 py-2`}
+          value={tour.description ?? ""}
+          maxLength={1000}
+          placeholder="Что гости увидят по пути"
+          onChange={(e) => updateTour(tour.id, { description: e.target.value || null })}
+        />
+      </Field>
+
+      <div className="space-y-2">
+        <p className="text-sm text-muted">Остановки по порядку</p>
+        {stops.length === 0 && (
+          <p className="rounded-xl bg-surface p-3 text-sm text-muted">
+            Нажмите «Добавлять точки» и кликайте по точкам на плане.
+          </p>
+        )}
+        <ol className="space-y-1">
+          {stops.map((poiId, i) => (
+            <li
+              key={stopKeys[i]}
+              className="flex items-center gap-2 rounded-xl bg-surface px-2 py-1 text-sm"
+            >
+              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-accent text-xs font-semibold text-accent-fg">
+                {i + 1}
+              </span>
+              <span className="min-w-0 flex-1 truncate">{poiName(poiId)}</span>
+              <button
+                type="button"
+                aria-label="Выше"
+                disabled={i === 0}
+                onClick={() => moveTourStop(tour.id, i, -1)}
+                className="grid size-8 place-items-center rounded-lg hover:bg-bg disabled:opacity-30"
+              >
+                <ChevronUp className="size-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="Ниже"
+                disabled={i === stops.length - 1}
+                onClick={() => moveTourStop(tour.id, i, 1)}
+                className="grid size-8 place-items-center rounded-lg hover:bg-bg disabled:opacity-30"
+              >
+                <ChevronDown className="size-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="Убрать остановку"
+                onClick={() => removeTourStop(tour.id, i)}
+                className="grid size-8 place-items-center rounded-lg text-danger hover:bg-bg"
+              >
+                <X className="size-4" />
+              </button>
+            </li>
+          ))}
+        </ol>
+        <Button
+          variant={editing ? "primary" : "secondary"}
+          className="w-full"
+          aria-pressed={editing}
+          onClick={() => setEditingTour(editing ? null : tour.id)}
+        >
+          <MousePointerClick className="size-4" aria-hidden />
+          {editing ? "Готово" : "Добавлять точки кликом на плане"}
+        </Button>
+      </div>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={tour.avoidStairs ?? false}
+          onChange={(e) => updateTour(tour.id, { avoidStairs: e.target.checked })}
+        />
+        Без ступенек (лифты и пандусы)
+      </label>
+
+      {stops.length >= 2 && (
+        <p
+          className={
+            route
+              ? "rounded-xl bg-green-50 p-3 text-sm text-green-900 dark:bg-green-950 dark:text-green-200"
+              : "rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+          }
+        >
+          {route
+            ? `${formatDistance(route.distanceM)} · ${formatDuration(route.durationS)} пешком`
+            : "Между некоторыми точками нет прохода: проверьте двери и лестницы"}
+        </p>
+      )}
+
+      <div className="space-y-2">
+        <p className="text-sm text-muted">Ссылка для гостей (после публикации)</p>
+        <div className="flex gap-2">
+          <input
+            readOnly
+            value={link}
+            aria-label="Ссылка на маршрут"
+            className={`${field} min-w-0 flex-1 text-xs`}
+          />
+          <Button
+            variant="secondary"
+            onClick={() =>
+              void navigator.clipboard.writeText(link).then(() => {
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 1500);
+              })
+            }
+          >
+            {copied ? "Есть" : "Копия"}
+          </Button>
+        </div>
+      </div>
+      <DeleteButton id={tour.id} />
+    </Section>
   );
 }

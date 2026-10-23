@@ -4,9 +4,10 @@
 import type { Unit } from "@ttkpr/api-client";
 import type { MapBundle } from "../bundle";
 import { fromLocal, type LonLat, toLocal, type XY } from "../geo";
+import { groundLevelId } from "../layers";
 import { dist, distanceToRing, insideRing, reflexCorners, visibleInside } from "./geometry";
 
-export type NodeKind = "door" | "approach" | "poi" | "connector" | "corner" | "point";
+export type NodeKind = "door" | "approach" | "poi" | "connector" | "corner" | "path" | "point";
 
 export interface NavNode {
   id: string;
@@ -40,6 +41,10 @@ const DOOR_SNAP_M = 0.35;
 const POI_ATTACH_M = 1.5;
 /** Paths keep this far from walls: doors are approached from inside the room, corners rounded. */
 const CLEARANCE_M = 0.9;
+/** A walkway end this close to an entrance leads into the building. */
+const PATH_DOOR_M = 3;
+/** Walkways are slightly preferred over cutting across a yard. */
+const PATH_PREFERENCE = 0.95;
 
 /** Meters-equivalent cost of changing one floor, on top of the horizontal walk. */
 export const CONNECTOR_COST: Record<NavEdge["kind"], number> = {
@@ -137,6 +142,34 @@ export function buildNavGraph(bundle: MapBundle): NavGraph {
     }
   }
 
+  // Walkways drawn by the organizer (between buildings, across a yard): vertices join the rooms
+  // they lie in, follow each other in order, and the ends lead into entrances nearby.
+  const ground = groundLevelId(bundle);
+  const pathLinks: [string, string, number][] = [];
+  for (const line of bundle.paths ?? []) {
+    const levelId = line.levelId ?? ground;
+    if (!levelId) continue;
+    const ids = line.geometry.coordinates.map((c, i) => {
+      const xy = local(c as LonLat);
+      const id = `path:${line.id}:${i}`;
+      add({ id, kind: "path", levelId, xy, unitIds: roomsAt(levelId, xy, 0.3), ref: line.id });
+      return id;
+    });
+    for (let i = 1; i < ids.length; i++) {
+      const a = nodes.get(ids[i - 1] as string) as NavNode;
+      const b = nodes.get(ids[i] as string) as NavNode;
+      pathLinks.push([a.id, b.id, dist(a.xy, b.xy)]);
+    }
+    for (const end of [ids[0], ids.at(-1)]) {
+      const node = nodes.get(end as string) as NavNode;
+      for (const door of nodes.values()) {
+        if (door.kind !== "door" || door.levelId !== levelId) continue;
+        const d = dist(door.xy, node.xy);
+        if (d <= PATH_DOOR_M) pathLinks.push([node.id, door.id, d]);
+      }
+    }
+  }
+
   for (const [levelId, list] of rooms) {
     for (const { unit, ring } of list) {
       reflexCorners(ring, CLEARANCE_M).forEach((xy, i) => {
@@ -157,6 +190,11 @@ export function buildNavGraph(bundle: MapBundle): NavGraph {
   for (const [door, approach, length] of doorLinks) {
     edges.get(door)?.push({ to: approach, cost: length, length, kind: "walk" });
     edges.get(approach)?.push({ to: door, cost: length, length, kind: "walk" });
+  }
+  for (const [a, b, length] of pathLinks) {
+    const cost = length * PATH_PREFERENCE;
+    edges.get(a)?.push({ to: b, cost, length, kind: "walk" });
+    edges.get(b)?.push({ to: a, cost, length, kind: "walk" });
   }
 
   // Between floors: every pair of points of the same stairs/lift.

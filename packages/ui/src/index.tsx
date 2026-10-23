@@ -1,10 +1,9 @@
-import { type ClassValue, clsx } from "clsx";
 import type { ButtonHTMLAttributes } from "react";
-import { twMerge } from "tailwind-merge";
+import { cn } from "./cn";
 
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+export { cn } from "./cn";
+export { ThemeSwitch } from "./ThemeSwitch";
+export * from "./theme";
 
 type Variant = "primary" | "secondary" | "ghost";
 

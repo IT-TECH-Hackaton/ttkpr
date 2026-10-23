@@ -40,7 +40,12 @@ def make_tiles(
     for width in level_widths:
         if width > image.width:
             break
-        level_image = image.resize(width / image.width) if width != image.width else image
+        # Exact 2:1 per level: a source a few pixels off 2:1 must not leave a short last row.
+        level_image = (
+            image.resize(width / image.width, vscale=(width // 2) / image.height)
+            if (width, width // 2) != (image.width, image.height)
+            else image
+        )
         cols, rows = width // TILE_SIZE, width // 2 // TILE_SIZE
         level_dir = out_dir / str(width)
         level_dir.mkdir(exist_ok=True)

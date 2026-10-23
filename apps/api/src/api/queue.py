@@ -10,7 +10,6 @@ from api.config import get_settings
 QUEUES = {
     "worker.tasks.stitch_panorama": "heavy",
     "worker.tasks.tile_panorama": "heavy",
-    "worker.tasks.build_map_version": "default",
 }
 
 

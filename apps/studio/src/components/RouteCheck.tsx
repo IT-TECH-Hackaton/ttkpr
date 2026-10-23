@@ -41,7 +41,7 @@ export function RouteCheck() {
   if ((doc.units?.length ?? 0) === 0) return null;
   if (issues.length === 0 && floorsLinked) {
     return (
-      <p className="flex items-center gap-2 rounded-xl bg-green-50 p-3 text-sm text-green-900">
+      <p className="flex items-center gap-2 rounded-xl bg-green-50 dark:bg-green-950/60 p-3 text-sm text-green-900 dark:text-green-200">
         <CircleCheck className="size-4 shrink-0" aria-hidden />
         Маршруты строятся ко всем местам
       </p>
@@ -50,7 +50,7 @@ export function RouteCheck() {
   return (
     <div className="space-y-2">
       {!floorsLinked && (
-        <p className="flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+        <p className="flex items-start gap-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 p-3 text-sm text-amber-900 dark:text-amber-200">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
           Этажи не связаны: добавьте лестницу или лифт на каждом этаже.
         </p>

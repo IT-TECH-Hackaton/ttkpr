@@ -147,3 +147,33 @@ async def test_underlay_upload_and_media(client: AsyncClient, register: Register
 
     assert (await client.get("/media/captures/anything.jpg")).status_code == 404
     assert (await client.get("/media/maps/../../etc/passwd")).status_code == 404
+
+
+async def test_visitor_events_become_organizer_stats(
+    client: AsyncClient, register: Register
+) -> None:
+    await register("stats@example.com")
+    created = (await client.post("/api/maps", json={"title": "Статистика"})).json()
+    slug = created["slug"]
+    # Not published yet: events are ignored.
+    body = '{"events":[{"kind":"view"}]}'
+    assert (await client.post(f"/api/public/maps/{slug}/events", content=body)).status_code == 204
+    await client.post(f"/api/maps/{created['id']}/publish")
+    events = [
+        {"kind": "view"},
+        {"kind": "view"},
+        {"kind": "poi", "key": "p-1"},
+        {"kind": "miss", "key": "  Туалет "},
+        {"kind": "hack", "key": "x"},
+    ]
+    sent = await client.post(
+        f"/api/public/maps/{slug}/events",
+        content=json.dumps({"events": events}),
+        headers={"Content-Type": "text/plain"},
+    )
+    assert sent.status_code == 204
+    stats = (await client.get(f"/api/maps/{created['id']}/stats?days=7")).json()
+    assert stats["totals"]["view"] == 2
+    assert stats["days"][-1]["views"] == 2
+    assert stats["topPois"] == [{"key": "p-1", "label": "p-1", "count": 1}]
+    assert stats["misses"][0]["key"] == "туалет"

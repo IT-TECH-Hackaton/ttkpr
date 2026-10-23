@@ -16,7 +16,7 @@ import { AppShell } from "../components/AppShell";
 import { QrCode } from "../components/QrCode";
 import { Avatar } from "../components/UserMenu";
 import { unwrap } from "../lib/api";
-import { studioOrigin } from "../lib/links";
+import { inviteLink as linkFor } from "../lib/links";
 import { can, ROLE_HINTS, ROLE_LABELS } from "../lib/permissions";
 
 type Role = MemberOut["role"];
@@ -67,7 +67,7 @@ export function TeamScreen({ mapId }: { mapId: string }) {
   const invite = useMutation({
     mutationFn: () => unwrap(createInvite({ path: { map_id: mapId }, body: { role: inviteRole } })),
   });
-  const inviteLink = invite.data ? `${studioOrigin()}/invite#t=${invite.data.token}` : "";
+  const inviteLink = invite.data ? linkFor(invite.data.token) : "";
   const error = add.error ?? change.error ?? remove.error ?? invite.error;
 
   return (
@@ -88,7 +88,11 @@ export function TeamScreen({ mapId }: { mapId: string }) {
           </div>
         </div>
 
-        {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-danger">{error.message}</p>}
+        {error && (
+          <p className="rounded-xl bg-red-50 dark:bg-red-950/60 p-3 text-sm text-danger">
+            {error.message}
+          </p>
+        )}
 
         <section className="space-y-3 rounded-2xl border border-border bg-bg p-5">
           <h2 className="text-lg font-semibold">Участники</h2>

@@ -1,16 +1,27 @@
 import type { Level, Poi } from "@ttkpr/api-client";
 import { categoryEmoji, categoryLabel } from "@ttkpr/map-core";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface Props {
   search: (query: string) => Poi[];
   levels: Level[];
   onPick: (poi: Poi) => void;
+  /** A query the visitor stopped typing (statistics: what people look for, what is missing). */
+  onQuery?: (query: string, found: boolean) => void;
 }
 
-export function SearchBar({ search, levels, onPick }: Props) {
+export function SearchBar({ search, levels, onPick, onQuery }: Props) {
   const [query, setQuery] = useState("");
   const results = search(query);
+  const found = results.length > 0;
+  const report = useRef(onQuery);
+  report.current = onQuery;
+  useEffect(() => {
+    const settled = query.trim();
+    if (settled.length < 3) return;
+    const timer = window.setTimeout(() => report.current?.(settled, found), 1500);
+    return () => window.clearTimeout(timer);
+  }, [query, found]);
   const levelName = (id: string) => levels.find((l) => l.id === id)?.name ?? "";
 
   return (

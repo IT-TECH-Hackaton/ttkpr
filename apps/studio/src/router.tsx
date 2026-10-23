@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-router";
 import { me } from "@ttkpr/api-client";
 import { ApiError, unwrap } from "./lib/api";
+import { STUDIO_BASE } from "./lib/links";
 import { meQueryKey } from "./lib/session";
 import { AuthScreen } from "./screens/Auth";
 import { CaptureScreen } from "./screens/Capture";
@@ -16,6 +17,7 @@ import { InviteScreen } from "./screens/Invite";
 import { MapsScreen } from "./screens/Maps";
 import { ProfileScreen } from "./screens/Profile";
 import { ShareScreen } from "./screens/Share";
+import { StatsScreen } from "./screens/Stats";
 import { TeamScreen } from "./screens/Team";
 
 interface RouterContext {
@@ -98,6 +100,15 @@ const teamRoute = createRoute({
   },
 });
 
+const statsRoute = createRoute({
+  getParentRoute: () => authed,
+  path: "/maps/$mapId/stats",
+  component: function Stats() {
+    const { mapId } = statsRoute.useParams();
+    return <StatsScreen mapId={mapId} />;
+  },
+});
+
 /** Invite links: /invite#t=…; works signed out (asks to sign in first). */
 const inviteRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -138,11 +149,11 @@ const routeTree = rootRoute.addChildren([
   registerRoute,
   captureRoute,
   inviteRoute,
-  authed.addChildren([mapsRoute, profileRoute, editorRoute, shareRoute, teamRoute]),
+  authed.addChildren([mapsRoute, profileRoute, editorRoute, shareRoute, teamRoute, statsRoute]),
 ]);
 
 export function createAppRouter(queryClient: QueryClient) {
-  return createRouter({ routeTree, context: { queryClient } });
+  return createRouter({ routeTree, context: { queryClient }, basepath: STUDIO_BASE });
 }
 
 declare module "@tanstack/react-router" {

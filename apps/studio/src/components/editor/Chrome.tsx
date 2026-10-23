@@ -4,6 +4,7 @@ import { bundleBounds, CONNECTOR_LABELS, POI_CATEGORIES, sortedLevels } from "@t
 import { cn } from "@ttkpr/ui";
 import {
   Camera,
+  ChartColumn,
   Check,
   ChevronDown,
   CircleQuestionMark,
@@ -26,6 +27,7 @@ import {
   QrCode,
   Redo2,
   Rocket,
+  Route,
   Square,
   Undo2,
   UserRound,
@@ -33,7 +35,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
-import { mapLink } from "../../lib/links";
+import { localMapLink } from "../../lib/links";
 import { fitTo, zoomIn, zoomOut } from "../../lib/mapView";
 import { can, ROLE_LABELS } from "../../lib/permissions";
 import { type DoorType, type LayerGroup, type SaveState, type Tool, useDraft } from "../../store";
@@ -100,6 +102,14 @@ export const TOOLS: ToolDef[] = [
     key: "M",
     icon: <MapPin />,
     hint: "Клик — точка выбранной категории, можно ставить подряд",
+    needs: "edit",
+  },
+  {
+    id: "path",
+    label: "Дорожка",
+    key: "W",
+    icon: <Route />,
+    hint: "Клики по изгибам дорожки, двойной клик — готово. Соединяет входы зданий через улицу",
     needs: "edit",
   },
   {
@@ -189,12 +199,15 @@ export function TopLeft({ map, onOpenHelp }: { map: MapSummary; onOpenHelp: () =
               <MenuItem icon={<Users />} onClick={() => go("/maps/$mapId/team")}>
                 Команда и роли
               </MenuItem>
+              <MenuItem icon={<ChartColumn />} onClick={() => go("/maps/$mapId/stats")}>
+                Статистика посещений
+              </MenuItem>
               <MenuItem
                 icon={<Eye />}
                 disabled={!map.publishedNumber}
                 onClick={() => {
                   close();
-                  window.open(mapLink(map.slug), "_blank");
+                  window.open(localMapLink(map.slug), "_blank");
                 }}
               >
                 Открыть как посетитель
@@ -217,7 +230,7 @@ export function TopLeft({ map, onOpenHelp }: { map: MapSummary; onOpenHelp: () =
         }}
       </Popover>
 
-      <div className={cn(panel, "flex h-11 min-w-0 items-center gap-2 px-4")}>
+      <div className={cn(panel, "flex h-11 min-w-0 items-center gap-2 px-4 max-sm:hidden")}>
         <span className="max-w-[28vw] truncate font-semibold lg:max-w-64">{map.title}</span>
         <span className="hidden whitespace-nowrap rounded-md bg-white/10 px-2 py-0.5 text-xs text-white/80 lg:inline">
           {ROLE_LABELS[map.role ?? "viewer"]}
@@ -316,7 +329,7 @@ export function TopRight({
         <span className="[&>svg]:size-4">{save.icon}</span>
         {save.label}
       </div>
-      <div className={cn(panel, "flex items-center p-0.5")}>
+      <div className={cn(panel, "flex items-center p-0.5 max-md:hidden")}>
         <button
           type="button"
           title="Поделиться: ссылка и QR-коды"
@@ -341,7 +354,7 @@ export function TopRight({
           title={map.publishedNumber ? "Открыть опубликованную карту" : "Карта ещё не опубликована"}
           aria-label="Открыть как посетитель"
           disabled={!map.publishedNumber}
-          onClick={() => window.open(mapLink(map.slug), "_blank")}
+          onClick={() => window.open(localMapLink(map.slug), "_blank")}
           className={iconButton}
         >
           <Eye />
@@ -411,7 +424,7 @@ function OptionMenu<T extends string>({
           aria-label={label}
           aria-expanded={open}
           onClick={toggle}
-          className="-ml-1 grid h-11 w-5 place-items-center rounded-lg text-white/60 hover:bg-white/10"
+          className="-ml-1 grid h-11 w-7 place-items-center rounded-lg text-white/60 hover:bg-white/10"
         >
           <ChevronDown className="size-3.5" />
         </button>
@@ -494,7 +507,10 @@ export function Toolbar({ map, onUploadPlan }: { map: MapSummary; onUploadPlan: 
     <div
       role="toolbar"
       aria-label="Инструменты"
-      className={cn(panel, "pointer-events-auto flex max-w-full items-center overflow-x-auto p-1")}
+      className={cn(
+        panel,
+        "pointer-events-auto flex max-w-full snap-x items-center overflow-x-auto p-1 [scrollbar-width:none]",
+      )}
     >
       {tools.map((def) => (
         <div key={def.id} className="flex items-center">

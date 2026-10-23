@@ -7,4 +7,6 @@ export * from "./panos";
 export * from "./plural";
 export * from "./routing";
 export * from "./slug";
+export * from "./theme";
 export * from "./underlays";
+export * from "./walls";

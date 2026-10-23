@@ -8,7 +8,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
 from api.config import get_settings
-from api.routers import auth, health, maps, media, members, panoramas, public
+from api.routers import auth, health, maps, media, members, panoramas, public, stats
 
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
@@ -25,8 +25,15 @@ def _same_origin(request: Request, origin: str) -> bool:
     return bool(host) and urlsplit(origin).netloc == host
 
 
+PLACEHOLDER_SECRETS = {"dev-secret-change-me", "change-me", "change-me-in-production"}
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
+    if settings.app_env == "production" and (
+        settings.secret_key in PLACEHOLDER_SECRETS or len(settings.secret_key) < 32
+    ):
+        raise RuntimeError("SECRET_KEY: задайте случайную строку от 32 символов (infra/.env)")
     app = FastAPI(
         title="Карта пространства API",
         version="0.2.0",
@@ -56,6 +63,7 @@ def create_app() -> FastAPI:
     app.include_router(members.router)
     app.include_router(panoramas.router)
     app.include_router(public.router)
+    app.include_router(stats.router)
     app.include_router(media.router)
     return app
 

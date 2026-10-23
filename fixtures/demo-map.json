@@ -502,6 +502,40 @@
           ]
         ]
       }
+    },
+    {
+      "id": "u-tent",
+      "levelId": "l1",
+      "name": "Шатёр партнёров",
+      "category": "hall",
+      "walkable": true,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              37.62047889,
+              55.75376644
+            ],
+            [
+              37.62070237,
+              55.75376644
+            ],
+            [
+              37.62070237,
+              55.75387424
+            ],
+            [
+              37.62047889,
+              55.75387424
+            ],
+            [
+              37.62047889,
+              55.75376644
+            ]
+          ]
+        ]
+      }
     }
   ],
   "openings": [
@@ -609,6 +643,24 @@
           [
             37.6206066,
             55.754
+          ]
+        ]
+      }
+    },
+    {
+      "id": "o-tent",
+      "levelId": "l1",
+      "category": "entrance",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            37.62055871,
+            55.75387424
+          ],
+          [
+            37.62062256,
+            55.75387424
           ]
         ]
       }
@@ -786,6 +838,18 @@
   ],
   "pois": [
     {
+      "id": "p-tent",
+      "levelId": "l1",
+      "name": "Шатёр партнёров",
+      "category": "stand",
+      "description": "Отдельное здание во дворе: стенды партнёров и мерч.",
+      "position": [
+        37.62059063,
+        55.75382034
+      ],
+      "heightM": 1.2
+    },
+    {
       "id": "p-stand-a1",
       "levelId": "l1",
       "name": "Стенд A1",
@@ -950,5 +1014,44 @@
       }
     }
   ],
-  "paths": []
+  "paths": [
+    {
+      "id": "w-yard",
+      "levelId": null,
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            37.62057467,
+            55.75399102
+          ],
+          [
+            37.62063852,
+            55.75393712
+          ],
+          [
+            37.62059063,
+            55.75388322
+          ]
+        ]
+      }
+    }
+  ],
+  "tours": [
+    {
+      "id": "t-hackathon",
+      "name": "Обход хакатона",
+      "description": "Регистрация, шатёр партнёров во дворе, залы, кофе и менторы на втором этаже.",
+      "stops": [
+        "p-registration",
+        "p-tent",
+        "p-stand-a1",
+        "p-stage",
+        "p-coffee",
+        "p-mentors"
+      ],
+      "avoidStairs": false
+    }
+  ],
+  "underlays": []
 }

@@ -55,7 +55,7 @@ export function EndpointPicker({
       role="dialog"
       aria-modal
       aria-label={title}
-      className="fixed inset-0 z-30 flex flex-col bg-bg"
+      className="fixed inset-0 z-30 flex flex-col bg-bg min-[900px]:inset-auto min-[900px]:bottom-4 min-[900px]:left-4 min-[900px]:top-4 min-[900px]:w-[380px] min-[900px]:overflow-hidden min-[900px]:rounded-2xl min-[900px]:border min-[900px]:border-border min-[900px]:shadow-2xl"
     >
       <div className="safe-top flex items-center gap-1 border-b border-border px-2 pb-2">
         <button

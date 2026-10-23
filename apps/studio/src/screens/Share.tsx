@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import { downloadQrPng, downloadQrSvg, QrCode } from "../components/QrCode";
 import { unwrap } from "../lib/api";
-import { hereLink, mapLink } from "../lib/links";
+import { hereLink, isLanOnly, localMapLink, mapLink } from "../lib/links";
 
 const ACCESS: { id: MapSummary["accessMode"]; title: string; hint: string }[] = [
   { id: "link", title: "По ссылке", hint: "Видят все, у кого есть ссылка или QR-код" },
@@ -59,15 +59,21 @@ export function ShareScreen({ mapId }: { mapId: string }) {
   return (
     <AppShell>
       <div className="space-y-8 print:p-0">
-        <header className="flex items-center gap-3 print:hidden">
-          <Link to="/maps/$mapId" params={{ mapId }} className="text-sm text-muted hover:text-fg">
+        <header className="flex flex-wrap items-center gap-x-3 gap-y-1 print:hidden">
+          <Link
+            to="/maps/$mapId"
+            params={{ mapId }}
+            className="inline-flex min-h-11 items-center text-sm text-muted hover:text-fg"
+          >
             ← К редактору
           </Link>
-          <h1 className="flex-1 text-2xl font-semibold">Поделиться: {current.title}</h1>
+          <h1 className="w-full text-xl font-semibold sm:w-auto sm:flex-1 sm:text-2xl">
+            Поделиться: {current.title}
+          </h1>
         </header>
 
         {!current.publishedNumber && (
-          <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-amber-100 p-4 text-amber-900 print:hidden">
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-amber-100 dark:bg-amber-950/60 p-4 text-amber-900 dark:text-amber-200 print:hidden">
             <span className="flex-1">
               Карта ещё не опубликована — посетители увидят ошибку по ссылке.
             </span>
@@ -78,7 +84,7 @@ export function ShareScreen({ mapId }: { mapId: string }) {
         )}
 
         <section className="grid gap-6 md:grid-cols-[1fr_auto] print:hidden">
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             <h2 className="text-lg font-semibold">Ссылка</h2>
             <div className="flex gap-2">
               <input
@@ -101,7 +107,7 @@ export function ShareScreen({ mapId }: { mapId: string }) {
                 </Button>
               )}
               <a
-                href={link}
+                href={localMapLink(current.slug)}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex min-h-11 items-center rounded-xl border border-border px-4 font-medium"
@@ -109,6 +115,13 @@ export function ShareScreen({ mapId }: { mapId: string }) {
                 Открыть как посетитель
               </a>
             </div>
+            {isLanOnly() && (
+              <p className="rounded-xl bg-surface p-3 text-sm text-muted">
+                Это адрес компьютера в локальной сети: ссылка и QR-код откроются только на
+                устройствах в той же сети Wi-Fi. Чтобы делиться через интернет, разверните проект на
+                сервере или откройте его через туннель — см. README.
+              </p>
+            )}
 
             <form
               className="space-y-2"
@@ -120,13 +133,13 @@ export function ShareScreen({ mapId }: { mapId: string }) {
               <label htmlFor="slug" className="block text-sm text-muted">
                 Красивый адрес: …/m/<b>{slug || "адрес"}</b>
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <input
                   id="slug"
                   value={slug}
                   onChange={(e) => setSlug(e.target.value.toLowerCase())}
                   className={cn(
-                    "h-12 min-w-0 flex-1 rounded-xl border bg-bg px-4 outline-none",
+                    "h-12 min-w-[12rem] flex-1 rounded-xl border bg-bg px-4 outline-none",
                     slugValid ? "border-border focus:border-accent" : "border-danger",
                   )}
                 />
@@ -145,7 +158,7 @@ export function ShareScreen({ mapId }: { mapId: string }) {
                 </Button>
               </div>
               <p className={cn("text-xs", slugValid ? "text-muted" : "text-danger")}>
-                3–40 символов: латиница, цифры и дефис. Старая ссылка перестанет работать.
+                3–32 символа: латиница, цифры и дефис. Старая ссылка перестанет работать.
               </p>
               {save.error && <p className="text-sm text-danger">{save.error.message}</p>}
             </form>

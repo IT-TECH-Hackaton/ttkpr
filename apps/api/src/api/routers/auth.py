@@ -1,13 +1,20 @@
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import delete, select
 
 from api import ratelimit
 from api.deps import AppSettings, CurrentUser, DbSession
 from api.models import Session, User
 from api.schemas import LoginRequest, PasswordChange, ProfileUpdate, RegisterRequest, UserOut
-from api.security import hash_password, hash_token, new_session_token, verify_password
+from api.security import (
+    dummy_hash,
+    hash_password,
+    hash_token,
+    new_session_token,
+    verify_password,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -38,11 +45,12 @@ async def register(
     db: DbSession,
     settings: AppSettings,
 ) -> User:
-    ratelimit.limit(request, "register", max_hits=10, window_s=3600)
+    ratelimit.limit(request, "register", max_hits=60, window_s=3600)
     email = body.email.lower()
     if await db.scalar(select(User.id).where(User.email == email)):
         raise HTTPException(status.HTTP_409_CONFLICT, "Пользователь с таким email уже есть")
-    user = User(email=email, name=body.name, password_hash=hash_password(body.password))
+    password_hash = await run_in_threadpool(hash_password, body.password)
+    user = User(email=email, name=body.name, password_hash=password_hash)
     db.add(user)
     await db.flush()
     await _start_session(db, settings, user, response)
@@ -57,9 +65,13 @@ async def login(
     db: DbSession,
     settings: AppSettings,
 ) -> User:
-    ratelimit.limit(request, "login", max_hits=10, window_s=300)
-    user = await db.scalar(select(User).where(User.email == body.email.lower()))
-    if user is None or not verify_password(user.password_hash, body.password):
+    email = body.email.lower()
+    ratelimit.limit(request, "login", max_hits=10, window_s=300, subject=email)
+    ratelimit.limit(request, "login-ip", max_hits=200, window_s=300)
+    user = await db.scalar(select(User).where(User.email == email))
+    # Unknown emails cost the same argon2 time, so timing does not reveal who is registered.
+    known = user.password_hash if user else dummy_hash()
+    if not await run_in_threadpool(verify_password, known, body.password) or user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный email или пароль")
     await _start_session(db, settings, user, response)
     return user
@@ -98,9 +110,9 @@ async def change_password(
 ) -> None:
     """Also signs out every other device: a changed password must lock out a stolen session."""
     ratelimit.limit(request, "password", max_hits=10, window_s=300)
-    if not verify_password(user.password_hash, body.current_password):
+    if not await run_in_threadpool(verify_password, user.password_hash, body.current_password):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Текущий пароль указан неверно")
-    user.password_hash = hash_password(body.new_password)
+    user.password_hash = await run_in_threadpool(hash_password, body.new_password)
     current = hash_token(request.cookies.get(settings.session_cookie, ""))
     await db.execute(
         delete(Session).where(Session.user_id == user.id, Session.token_hash != current)

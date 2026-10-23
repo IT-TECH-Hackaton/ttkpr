@@ -19,7 +19,7 @@ docker compose -f infra/docker-compose.dev.yml up -d
 В трёх терминалах:
 
 ```bash
-cd apps/api && uv run alembic upgrade head && uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 --proxy-headers
+cd apps/api && uv run alembic upgrade head && uv run uvicorn api.main:app --host 127.0.0.1 --port 8000 --proxy-headers
 ```
 
 ```bash
@@ -30,8 +30,10 @@ uv run --package worker celery -A worker.celery_app worker -Q default,heavy --po
 HTTPS=1 pnpm dev
 ```
 
-- Студия организатора: https://localhost:5174 — регистрация, карты, редактор, «Поделиться».
-- Карта посетителя: https://localhost:5173/m/demo (демо) или `/m/<адрес карты>`.
+Всё открывается с одного адреса (порт 5173): карта посетителя, студия и API. Один сертификат на телефоне, ссылки и QR всегда совпадают со страницей.
+- Студия организатора: https://localhost:5173/studio/ — регистрация, карты, редактор, «Поделиться», статистика.
+- Карта посетителя: https://localhost:5173/m/demo (встроенное демо) или `/m/<адрес карты>`.
+- С телефона в той же Wi-Fi: `https://<IP компьютера>:5173/...` — студия сама подставляет этот адрес в ссылки и QR.
 - Маршрут: выберите место → «Маршрут сюда», или откройте `/m/demo?here=p-stand-a1` (так открывает QR-метка «Вы здесь») и выберите, куда идти; «Пройти по панорамам» ведёт по маршруту в 360°.
 
 Сертификат самоподписанный: браузер один раз попросит подтвердить переход.
@@ -45,13 +47,57 @@ HTTPS=1 pnpm dev
 
 Если телефон не открывает ссылку — разрешите Node.js в брандмауэре Windows для частных сетей.
 
-## Весь стек в Docker
+## Весь стек в Docker (развёртывание)
+
+1. `infra/.env`: скопируйте `infra/.env.example`, задайте `SITE_HOST` (домен или IP компьютера в сети, например `10.11.12.101`), `POSTGRES_PASSWORD` и `SECRET_KEY` (`openssl rand -hex 32`). Без ключа API не стартует.
+2. Сборка и запуск:
 
 ```bash
-docker compose -f infra/docker-compose.yml up --build
+docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build
 ```
 
-https://localhost — карта, https://studio.localhost — студия. Команды проверок — в [CLAUDE.md](CLAUDE.md#команды).
+3. Тестовые аккаунты всех ролей и опубликованная демо-карта (повторный запуск обновляет демо):
+
+```bash
+docker compose -f infra/docker-compose.yml --env-file infra/.env --profile seed run --rm seed > data/test-accounts.md
+```
+
+Адреса: `https://SITE_HOST/` — посетитель, `https://SITE_HOST/studio/` — студия, `https://SITE_HOST/m/demo-ploschadka-hakatona` — опубликованная демо-карта. Сертификат по IP выдаёт внутренний CA Caddy — браузер один раз попросит подтвердить. Для доступа из интернета нужен домен (Caddy сам получит сертификат) или туннель: тогда задайте `PUBLIC_URL`, чтобы ссылки и QR вели на него. Команды проверок — в [CLAUDE.md](CLAUDE.md#команды).
+
+## Развёртывание на сервер (одной командой)
+
+Нужен Ubuntu-сервер с root-доступом. Всё собирается и работает на сервере, с компьютера только загружается код. Команды — для PowerShell.
+1. Ключ для деплоя (один раз):
+
+```powershell
+ssh-keygen -t ed25519 -N '""' -f $env:USERPROFILE\.ssh\ttkpr_deploy -C ttkpr-deploy
+```
+
+2. Добавьте ключ на сервер — пароль root вводите сами, один раз. `-b <IP сетевой карты>` отправляет SSH напрямую, мимо VPN (Happ/xray и подобные рвут соединения на порт 22):
+
+```powershell
+type $env:USERPROFILE\.ssh\ttkpr_deploy.pub | ssh -b 10.11.12.101 root@217.144.184.43 "mkdir -p ~/.ssh && tr -d '\r' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+```
+
+3. Выкладка (первый раз ~10 минут, дальше быстрее):
+
+```powershell
+.\infra\deploy\deploy.ps1
+```
+
+Скрипт запускает `infra/deploy/deploy.sh` в Git Bash (обычный `bash` в PowerShell — это WSL), сам берёт IP сетевой карты в обход VPN, ставит на сервер Docker, файрвол (22, 80, 443) и swap, загружает рабочую копию, создаёт на сервере `infra/.env` со случайными секретами, собирает и запускает стек, заводит тестовые аккаунты и демо-карту. Адрес — `https://217-144-184-43.sslip.io` с сертификатом Let's Encrypt: на телефонах работают камера, гироскоп и офлайн. Пароли аккаунтов — в `data/test-accounts-server.md` (не в git). Другой сервер или домен: `.\infra\deploy\deploy.ps1 -Server … -SiteHost …`.
+
+Ещё аккаунт для студии (на сервере, пароль печатается один раз):
+
+```bash
+docker compose -f infra/docker-compose.yml --env-file infra/.env exec api python -m api.accounts create name@example.com "Имя" --role owner --map demo-ploschadka-hakatona
+```
+
+## Что умеет
+
+Подробно по пунктам ТЗ — [docs/TZ.md](docs/TZ.md).
+- **Посетитель:** план с этажами, 3D-видом и 3D-макетом этажа по фотографиям, поиск, карточки мест, маршрут «откуда → куда» (двери, лестницы, лифты, «без ступенек», дорожки между зданиями), проход маршрута по панорамам, маршруты организатора (экскурсии), QR «Вы здесь», офлайн, светлая и тёмная тема, раскладка для телефона и для широкого экрана.
+- **Организатор:** редактор плана (комнаты, контуры, двери, лестницы, точки, дорожки, панорамы, точки прямо в панораме), распознавание комнат по картинке плана, проверка связности маршрутов, экскурсии со ссылкой, съёмка панорам с телефона, публикация без смены ссылки, команда и роли, статистика посещений (места, маршруты, поиски без результата).
 
 ## Claude Code
 

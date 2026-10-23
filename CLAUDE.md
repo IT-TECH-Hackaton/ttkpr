@@ -2,7 +2,7 @@
 
 Хакатон-кейс: сервис интерактивных карт зданий и площадок с 2D-планом, панорамами (съёмка с телефона в браузере) и навигацией. Два типа пользователей: **организатор** (studio — редактор, съёмка) и **посетитель** (viewer — карта по ссылке / в iframe). Оценивают: удобство с телефона, стабильность, скорость загрузки карт и панорам, защиту доступа.
 
-Полная архитектура и обоснования: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Перед крупным изменением сверяйся с ним; если решение меняется — обнови документ в том же изменении.
+Полная архитектура и обоснования: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Сверка с ТЗ по пунктам: [docs/TZ.md](docs/TZ.md) — обновляй при изменении функций. Перед крупным изменением сверяйся с ним; если решение меняется — обнови документ в том же изменении.
 
 ## Стек (зафиксирован)
 
@@ -19,11 +19,11 @@
 ## Структура
 
 ```
-apps/viewer          PWA посетителя: карта, поиск, шторка, панорама; маршрут «откуда → куда»
-                     и проход по панорамам; «Сохранить офлайн», «Мои карты», свой service worker
-apps/studio          вход/регистрация, профиль, мои карты, команда и приглашения, редактор
-                     (панели как в Mappedin, инструменты с привязкой, офлайн-копия правок),
-                     «Поделиться» (адрес, доступ, QR, метки), съёмка с телефона (очередь кадров)
+apps/viewer          PWA посетителя: карта (2D/3D), поиск, шторка/панель, панорама; маршруты, экскурсии
+                     и проход по панорамам; офлайн, «Мои карты», анонимная статистика (sendBeacon)
+apps/studio          живёт под /studio/ на том же адресе, что и карта: вход, профиль, мои карты, команда,
+                     редактор (инструменты с привязкой, дорожки, экскурсии, распознавание комнат по
+                     картинке), «Поделиться», статистика, съёмка с телефона (очередь кадров)
 apps/api             FastAPI: сессии, карты, черновик с блокировкой, публикация версий, публичные
                      manifest/bundle, панорамы (кадры по QR-токену), загрузки, /media
 apps/worker          Python: склейка панорам по гироскопу + SIFT (worker.stitch), тайлы
@@ -41,12 +41,13 @@ data/                локальное хранилище файлов (data/st
   1. `docker compose -f infra/docker-compose.dev.yml up -d` — Postgres и Redis;
   2. `cd apps/api && uv run alembic upgrade head && uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 --proxy-headers` (на Windows без `--reload`: перезагрузка зависает);
   3. `uv run --package worker celery -A worker.celery_app worker -Q default,heavy --pool=solo` (на Windows нужен `--pool=solo`);
-  4. `HTTPS=1 pnpm dev` — viewer https://localhost:5173 и studio https://localhost:5174 (HTTPS обязателен для камеры телефона; в QR и ссылках подставляется LAN-адрес машины).
+  4. `HTTPS=1 pnpm dev` — всё на https://localhost:5173: карта `/`, студия `/studio/` (сервер студии на 5174 внутренний, его проксирует сервер карты), API `/api`. HTTPS обязателен для камеры телефона; в QR и ссылках подставляется LAN-адрес машины.
 - `pnpm lint` · `pnpm typecheck` · `pnpm test` · `pnpm build` — JS-проверки (Biome, tsc, Vitest); `pnpm --filter @ttkpr/viewer e2e` — офлайн и маршруты в собранной PWA (Playwright, Chromium).
 - `uv run ruff check .` · `uv run mypy packages/map-schema/src apps/api/src apps/worker/src` · `uv run pytest` — Python. Тесты API с базой: `TEST_DATABASE_URL=postgresql+asyncpg://…`, без неё пропускаются.
 - `pnpm gen:api` — после любого изменения схемы или ручек API; CI проверяет, что клиент закоммичен.
 - `uv run --package worker python -m worker.demo` — пересобрать демо-карту и тестовую панораму-сетку.
-- `infra/docker-compose.yml` — весь стек за Caddy (https://localhost и https://studio.localhost).
+- `python -m api.accounts create <email> "<имя>" --role owner --map <slug>` — выдать аккаунт студии без регистрации (печатает пароль один раз; на сервере — через `docker compose … exec api`).
+- `infra/docker-compose.yml` — весь стек за Caddy на одном хосте `SITE_HOST` (`/`, `/studio/`, `/api`, `/media`); секреты в `infra/.env` (без `SECRET_KEY` API не стартует). Тестовые аккаунты и демо-карта: `--profile seed run --rm seed` (см. README).
 - Миграции: `cd apps/api && uv run alembic revision --autogenerate -m "…"`, затем проверить файл руками.
 - Задачи Celery отправляются по имени; очередь задаётся в `apps/api/src/api/queue.py` (`QUEUES`) и должна совпадать с очередями воркера.
 
@@ -69,6 +70,17 @@ QR-токен съёмки действует от имени выдавшего
 - Стоимость: метры пешком + штраф за этаж (`CONNECTOR_COST`); «Без ступенек» выкидывает лестницы и эскалаторы. Подсказки собираются в `route.ts`: двери, повороты, этажи.
 - URL посетителя: `from`/`to` — id точки или `@lon,lat,levelId`; `acc` — без ступенек; `here` — QR-метка «Вы здесь»; `walk` — номер панорамы при проходе.
 - Проход по панорамам: `panosAlongRoute` (до 4 м от линии, по порядку), взгляд — вдоль линии маршрута, линия на полу — polyline-маркер PSV. Студия показывает, куда не дойти (`RouteCheck`).
+
+## Ещё функции
+
+- Тема: `packages/ui/src/theme.ts` (класс `dark` на `<html>`, выбор на устройстве), план перекрашивается `applyPlanTheme` (map-core).
+- Экскурсии: `MapDocument.tours` (точки по порядку), `findTourRoute`; у посетителя `?tour=<id>`.
+- Дорожки (`paths`) соединяют здания: концы у входов ведут внутрь, путь без уровня — на земле.
+- 3D: стены из контуров комнат с проёмами дверей (`wallSegments`/`wallFeatures`), fill-extrusion на плане; «3D-макет» (`viewer/components/Dollhouse.tsx`, three.js) текстурирует стены и пол комнат кадром их панорамы (шейдер: направление из точки съёмки → equirect).
+- Точки в панораме: студия, `PanoPlacer.tsx` — клик по полу → `floorPointFromPano` → точка на плане.
+- 3D-заставка входа и стартовой страницы: `@ttkpr/ui/hero` (three.js, данные — демо-план в `hero/scene-data.ts`), только ленивым чанком.
+- Статистика: `POST /api/public/maps/{slug}/events` (text/plain, sendBeacon) → `map_stats` по дням, `GET /api/maps/{id}/stats`; без идентификаторов посетителей.
+- Распознавание плана: `studio/src/lib/autoPlan.ts` в браузере (Otsu → дилатация закрывает двери → компоненты → контуры, выравнивание по осям).
 
 ## Офлайн
 

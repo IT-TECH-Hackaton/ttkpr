@@ -1,5 +1,5 @@
 import { cn } from "@ttkpr/ui";
-import { ArrowUpDown, MapPin, X } from "lucide-react";
+import { ArrowUpDown, MapPin, Route, X } from "lucide-react";
 import type { End } from "../lib/routing";
 
 interface Props {
@@ -78,5 +78,36 @@ function EndButton({
         {value ?? placeholder}
       </span>
     </button>
+  );
+}
+
+/** An organizer's tour instead of "откуда → куда". */
+export function TourCard({
+  name,
+  stops,
+  onClose,
+}: {
+  name: string;
+  stops: number;
+  onClose: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-border bg-bg p-2 pl-3 shadow-lg">
+      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-accent text-accent-fg">
+        <Route className="size-5" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-muted">Маршрут организатора · {stops} точек</p>
+        <p className="truncate font-semibold">{name}</p>
+      </div>
+      <button
+        type="button"
+        aria-label="Закрыть маршрут"
+        onClick={onClose}
+        className="grid size-11 place-items-center rounded-xl text-muted active:bg-surface"
+      >
+        <X className="size-5" />
+      </button>
+    </div>
   );
 }

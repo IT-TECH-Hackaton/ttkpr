@@ -334,6 +334,10 @@ export type MapDocument = {
      */
     paths?: Array<PathLine>;
     /**
+     * Tours
+     */
+    tours?: Array<Tour>;
+    /**
      * Underlays
      */
     underlays?: Array<Underlay>;
@@ -388,7 +392,7 @@ export type MapUpdate = {
     /**
      * Slug
      *
-     * Short link /m/{slug}: 3-40 latin letters, digits and dashes
+     * Short link /m/{slug}: 3-32 latin letters, digits and dashes
      */
     slug?: string | null;
     accessMode?: AccessMode | null;
@@ -833,6 +837,112 @@ export type RegisterRequest = {
      * Password
      */
     password: string;
+};
+
+/**
+ * StatCount
+ */
+export type StatCount = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Count
+     */
+    count: number;
+};
+
+/**
+ * StatDay
+ */
+export type StatDay = {
+    /**
+     * Day
+     */
+    day: string;
+    /**
+     * Views
+     */
+    views: number;
+};
+
+/**
+ * StatsOut
+ */
+export type StatsOut = {
+    /**
+     * Days
+     */
+    days: Array<StatDay>;
+    /**
+     * Totals
+     *
+     * Per kind: view, poi, route, pano, tour, search, miss
+     */
+    totals: {
+        [key: string]: number;
+    };
+    /**
+     * Toppois
+     */
+    topPois: Array<StatCount>;
+    /**
+     * Toproutes
+     */
+    topRoutes: Array<StatCount>;
+    /**
+     * Toptours
+     */
+    topTours: Array<StatCount>;
+    /**
+     * Searches
+     */
+    searches: Array<StatCount>;
+    /**
+     * Misses
+     *
+     * Searches that found nothing
+     */
+    misses: Array<StatCount>;
+    /**
+     * Private
+     */
+    private: boolean;
+};
+
+/**
+ * Tour
+ *
+ * A route the organizer prepared: an excursion, a stand tour, the way from the entrance.
+ */
+export type Tour = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Stops
+     *
+     * POI ids in visiting order; visitors see tours with at least two
+     */
+    stops?: Array<string>;
+    /**
+     * Avoidstairs
+     */
+    avoidStairs?: boolean;
 };
 
 /**
@@ -1938,3 +2048,68 @@ export type GetBundleResponses = {
 };
 
 export type GetBundleResponse = GetBundleResponses[keyof GetBundleResponses];
+
+export type RecordEventsData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/public/maps/{slug}/events';
+};
+
+export type RecordEventsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RecordEventsError = RecordEventsErrors[keyof RecordEventsErrors];
+
+export type RecordEventsResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type RecordEventsResponse = RecordEventsResponses[keyof RecordEventsResponses];
+
+export type MapStatsData = {
+    body?: never;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: {
+        /**
+         * Days
+         */
+        days?: number;
+    };
+    url: '/api/maps/{map_id}/stats';
+};
+
+export type MapStatsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MapStatsError = MapStatsErrors[keyof MapStatsErrors];
+
+export type MapStatsResponses = {
+    /**
+     * Successful Response
+     */
+    200: StatsOut;
+};
+
+export type MapStatsResponse = MapStatsResponses[keyof MapStatsResponses];

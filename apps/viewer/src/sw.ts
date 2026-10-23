@@ -27,10 +27,11 @@ cleanupOutdatedCaches();
 void self.skipWaiting();
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
-// App routes (/m/{slug}) work offline through the precached shell.
+// App routes (/m/{slug}) work offline through the precached shell. The studio shares the origin
+// (/studio/) but is not part of this app.
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL("/index.html"), {
-    denylist: [/^\/api\//, /^\/media\//],
+    denylist: [/^\/api\//, /^\/media\//, /^\/studio(\/|$)/],
   }),
 );
 

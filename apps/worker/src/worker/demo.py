@@ -26,8 +26,10 @@ from map_schema.models import (
     Pano,
     PanoStatus,
     PanoTiles,
+    PathLine,
     Poi,
     PolygonGeometry,
+    Tour,
     Unit,
     UnitCategory,
     Venue,
@@ -171,6 +173,13 @@ def build_document(tiles: PanoTiles) -> MapDocument:
             category=OpeningCategory.ENTRANCE,
             geometry=_door(34, 0, 38, 0),
         ),
+        # Second building across the yard: the partners' tent, reached by a walkway.
+        Opening(
+            id="o-tent",
+            level_id="l1",
+            category=OpeningCategory.ENTRANCE,
+            geometry=_door(35, -14, 39, -14),
+        ),
         Opening(id="o-hall-b", level_id="l1", geometry=_door(9, 12, 11, 12)),
         Opening(id="o-cafe", level_id="l1", geometry=_door(25, 12, 27, 12)),
         Opening(id="o-lift-1", level_id="l1", geometry=_door(33, 12, 35, 12)),
@@ -180,6 +189,14 @@ def build_document(tiles: PanoTiles) -> MapDocument:
         Opening(id="o-lift-2", level_id="l2", geometry=_door(33, 12, 35, 12)),
     ]
     pois = [
+        Poi(
+            id="p-tent",
+            level_id="l1",
+            name="Шатёр партнёров",
+            category="stand",
+            description="Отдельное здание во дворе: стенды партнёров и мерч.",
+            position=_ll(37, -20),
+        ),
         Poi(
             id="p-stand-a1",
             level_id="l1",
@@ -278,6 +295,31 @@ def build_document(tiles: PanoTiles) -> MapDocument:
             ],
         ),
     ]
+    units.append(
+        Unit(
+            id="u-tent",
+            level_id="l1",
+            name="Шатёр партнёров",
+            category=UnitCategory.HALL,
+            geometry=_rect(30, -26, 44, -14),
+        )
+    )
+    paths = [
+        PathLine(
+            id="w-yard",
+            geometry=LineStringGeometry(coordinates=[_ll(36, -1), _ll(40, -7), _ll(37, -13)]),
+        )
+    ]
+    tours = [
+        Tour(
+            id="t-hackathon",
+            name="Обход хакатона",
+            description=(
+                "Регистрация, шатёр партнёров во дворе, залы, кофе и менторы на втором этаже."
+            ),
+            stops=["p-registration", "p-tent", "p-stand-a1", "p-stage", "p-coffee", "p-mentors"],
+        )
+    ]
     return MapDocument(
         venue=Venue(id="demo", name="Демо-площадка хакатона", anchor=ANCHOR),
         levels=[Level(id="l1", name="1 этаж", ordinal=0), Level(id="l2", name="2 этаж", ordinal=1)],
@@ -286,6 +328,8 @@ def build_document(tiles: PanoTiles) -> MapDocument:
         connectors=connectors,
         pois=pois,
         panos=panos,
+        paths=paths,
+        tours=tours,
     )
 
 

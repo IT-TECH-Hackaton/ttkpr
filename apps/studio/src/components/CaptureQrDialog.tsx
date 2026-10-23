@@ -49,7 +49,7 @@ export function CaptureQrDialog({ mapId, levelId, position, onClose }: Props) {
           )}
         </div>
         {insecure && (
-          <p className="rounded-xl bg-amber-100 p-3 text-sm text-amber-900">
+          <p className="rounded-xl bg-amber-100 dark:bg-amber-950/60 p-3 text-sm text-amber-900 dark:text-amber-200">
             Студия открыта по HTTP: камера телефона потребует HTTPS. Запустите её с{" "}
             <code>HTTPS=1</code>.
           </p>

@@ -33,6 +33,9 @@ def verify(token: str) -> tuple[uuid.UUID, MemberRole] | None:
         payload = f"{map_hex}.{role}.{expires}"
         if not hmac.compare_digest(signature, _sign(payload)) or int(expires) < time.time():
             return None
-        return uuid.UUID(map_hex), MemberRole(role)
+        parsed_role = MemberRole(role)
+        if parsed_role == MemberRole.OWNER:
+            return None
+        return uuid.UUID(map_hex), parsed_role
     except ValueError:
         return None

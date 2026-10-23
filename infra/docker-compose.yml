@@ -6,7 +6,9 @@ x-backend-env: &backend-env
   REDIS_URL: redis://redis:6379/0
   # Frames, panoramas and plan images; shared by api and worker, served under /media.
   STORAGE_DIR: /data/storage
-  SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+  # Signs invites and capture QR codes; the API refuses to start with a placeholder.
+  SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in infra/.env (openssl rand -hex 32)}
+  APP_ENV: production
 
 services:
   web:
@@ -14,11 +16,10 @@ services:
       context: ..
       dockerfile: infra/web.Dockerfile
       args:
-        VITE_VIEWER_URL: https://${VIEWER_HOST:-localhost}
-        VITE_STUDIO_URL: https://${STUDIO_HOST:-studio.localhost}
+        # Empty: links use the address the page was opened at (open the studio by domain or LAN IP).
+        VITE_PUBLIC_URL: ${PUBLIC_URL:-}
     environment:
-      VIEWER_HOST: ${VIEWER_HOST:-localhost}
-      STUDIO_HOST: ${STUDIO_HOST:-studio.localhost}
+      SITE_HOST: ${SITE_HOST:-localhost}
     ports:
       - "80:80"
       - "443:443"
@@ -36,8 +37,8 @@ services:
       dockerfile: apps/api/Dockerfile
     environment:
       <<: *backend-env
-      PUBLIC_BASE_URL: https://${VIEWER_HOST:-localhost}
-      CORS_ORIGINS: '["https://${VIEWER_HOST:-localhost}", "https://${STUDIO_HOST:-studio.localhost}"]'
+      # Viewer and studio share one origin, so API calls are same-origin: no CORS needed.
+      CORS_ORIGINS: "[]"
     volumes:
       - storage:/data/storage
     healthcheck:
@@ -57,6 +58,23 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+
+  # One-off: test accounts and a published demo map.
+  #   docker compose -f infra/docker-compose.yml --profile seed run --rm seed
+  seed:
+    profiles: ["seed"]
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    environment: *backend-env
+    command: ["python", "-m", "api.seed"]
+    volumes:
+      - storage:/data/storage
+      - ../fixtures:/app/fixtures:ro
+      - ../apps/viewer/public/demo:/app/apps/viewer/public/demo:ro
+    depends_on:
+      api:
+        condition: service_healthy
 
   worker:
     build:

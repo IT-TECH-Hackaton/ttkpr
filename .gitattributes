@@ -1,4 +1,2 @@
-* text=auto eol=lf
-*.webp binary
-*.jpg binary
-*.png binary
+# Shell scripts run on Linux servers: never check them out with CRLF.
+*.sh text eol=lf

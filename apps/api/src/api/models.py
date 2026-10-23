@@ -1,9 +1,18 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -57,7 +66,9 @@ class Session(Base):
     __tablename__ = "sessions"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
@@ -92,7 +103,9 @@ class MapMember(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     map_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("maps.id", ondelete="CASCADE"))
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     role: Mapped[MemberRole] = mapped_column(String(16))
 
 
@@ -138,3 +151,27 @@ class Panorama(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
     )
+
+
+class StatKind(StrEnum):
+    VIEW = "view"  # the map was opened
+    POI = "poi"  # a place card was opened; key = poi id
+    ROUTE = "route"  # a route was built; key = "from>to"
+    PANO = "pano"  # a panorama was opened; key = pano id
+    TOUR = "tour"  # an organizer's tour was opened; key = tour id
+    SEARCH = "search"  # a search was used; key = the query
+    MISS = "miss"  # a search found nothing; key = the query
+
+
+class MapStat(Base):
+    """Anonymous daily counters for organizers: no visitor ids, no IP addresses."""
+
+    __tablename__ = "map_stats"
+    __table_args__ = (UniqueConstraint("map_id", "day", "kind", "key"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    map_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("maps.id", ondelete="CASCADE"), index=True)
+    day: Mapped[date] = mapped_column(Date)
+    kind: Mapped[StatKind] = mapped_column(String(16))
+    key: Mapped[str] = mapped_column(String(120), default="")
+    count: Mapped[int] = mapped_column(Integer, default=0)

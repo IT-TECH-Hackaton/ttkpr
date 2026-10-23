@@ -1,5 +1,10 @@
-import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
-import { Landing } from "./screens/Landing";
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  lazyRouteComponent,
+  Outlet,
+} from "@tanstack/react-router";
 import { MapScreen } from "./screens/MapScreen";
 
 export interface MapSearch {
@@ -15,6 +20,8 @@ export interface MapSearch {
   here?: string;
   /** Walking the route through panoramas: index of the current one. */
   walk?: number;
+  /** An organizer's prepared route (tour id). */
+  tour?: string;
 }
 
 const str = (value: unknown) => (typeof value === "string" && value ? value : undefined);
@@ -24,7 +31,8 @@ const rootRoute = createRootRoute({ component: Outlet });
 const landingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: Landing,
+  // Its own chunk: a shared map link (/m/…) never downloads the landing page.
+  component: lazyRouteComponent(() => import("./screens/Landing"), "Landing"),
 });
 
 export const mapRoute = createRoute({
@@ -40,6 +48,7 @@ export const mapRoute = createRoute({
       to: str(search.to),
       acc: search.acc === true || search.acc === "true" || search.acc === "1" ? true : undefined,
       here: str(search.here),
+      tour: str(search.tour),
       walk: search.walk !== undefined && Number.isInteger(walk) && walk >= 0 ? walk : undefined,
     };
   },

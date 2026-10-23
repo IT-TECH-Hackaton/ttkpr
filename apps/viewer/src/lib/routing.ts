@@ -88,7 +88,7 @@ export function useRoute(
 
 interface MarkProps {
   levelId: string;
-  kind: "start" | "end" | "floor" | "here";
+  kind: "start" | "end" | "floor" | "stop" | "here";
   label: string;
 }
 
@@ -97,6 +97,8 @@ export function routeFeatures(
   bundle: MapBundle,
   route: Route | null,
   hereId: string | undefined,
+  /** Tours: start, stops and finish carry their numbers. */
+  numbered = false,
 ): {
   lines: FeatureCollection<LineString, { levelId: string }>;
   marks: FeatureCollection<Point, MarkProps>;
@@ -116,7 +118,9 @@ export function routeFeatures(
     const first = route.steps[0];
     const last = route.steps.at(-1);
     if (first && first.position.join() !== here?.position.join()) {
-      marks.push(mark(first.position, { levelId: first.levelId, kind: "start", label: "" }));
+      marks.push(
+        mark(first.position, { levelId: first.levelId, kind: "start", label: numbered ? "1" : "" }),
+      );
     }
     for (const step of route.steps) {
       if (step.kind !== "floor" || !step.toLevelId) continue;
@@ -140,7 +144,21 @@ export function routeFeatures(
         );
       }
     }
-    if (last) marks.push(mark(last.position, { levelId: last.levelId, kind: "end", label: "" }));
+    let stop = 1;
+    for (const step of route.steps) {
+      if (step.kind !== "stop") continue;
+      stop += 1;
+      marks.push(mark(step.position, { levelId: step.levelId, kind: "stop", label: String(stop) }));
+    }
+    if (last) {
+      marks.push(
+        mark(last.position, {
+          levelId: last.levelId,
+          kind: "end",
+          label: numbered ? String(stop + 1) : "",
+        }),
+      );
+    }
   }
   return {
     lines: {

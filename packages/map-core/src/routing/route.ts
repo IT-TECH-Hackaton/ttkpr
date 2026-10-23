@@ -16,7 +16,7 @@ export interface RouteLeg {
   coordinates: LonLat[];
 }
 
-export type StepKind = "start" | "walk" | "door" | "turn" | "floor" | "arrive";
+export type StepKind = "start" | "walk" | "door" | "turn" | "floor" | "stop" | "arrive";
 
 export interface RouteStep {
   kind: StepKind;
@@ -283,6 +283,62 @@ export function findRoute(
     durationS,
     path: nodes.map((n) => ({ levelId: n.levelId, xy: n.xy })),
     usesStairs,
+  };
+}
+
+/**
+ * A prepared route through several places (an organizer's tour): consecutive legs joined into
+ * one route; intermediate arrivals become numbered "stop" steps.
+ */
+export function findTourRoute(
+  graph: NavGraph,
+  bundle: MapBundle,
+  stops: string[],
+  options: RouteOptions = {},
+): Route | null {
+  const parts: Route[] = [];
+  for (let i = 1; i < stops.length; i++) {
+    const part = findRoute(
+      graph,
+      bundle,
+      { poiId: stops[i - 1] as string },
+      { poiId: stops[i] as string },
+      options,
+    );
+    if (!part) return null;
+    parts.push(part);
+  }
+  if (parts.length === 0) return null;
+
+  const name = (id: string) => bundle.pois?.find((p) => p.id === id)?.name;
+  const steps: RouteStep[] = [];
+  const legs: RouteLeg[] = [];
+  const path: Route["path"] = [];
+  parts.forEach((part, i) => {
+    for (const step of part.steps.slice(i === 0 ? 0 : 1)) {
+      if (step.kind === "arrive" && i < parts.length - 1) {
+        const stopName = name(stops[i + 1] as string);
+        steps.push({
+          ...step,
+          kind: "stop",
+          text: `Точка ${i + 2} из ${stops.length}${stopName ? `: ${quote(stopName)}` : ""}`,
+        });
+      } else steps.push(step);
+    }
+    for (const leg of part.legs) {
+      const last = legs.at(-1);
+      if (last && last.levelId === leg.levelId) last.coordinates.push(...leg.coordinates.slice(1));
+      else legs.push({ levelId: leg.levelId, coordinates: [...leg.coordinates] });
+    }
+    path.push(...part.path.slice(i === 0 ? 0 : 1));
+  });
+  return {
+    legs,
+    steps,
+    path,
+    distanceM: parts.reduce((sum, p) => sum + p.distanceM, 0),
+    durationS: parts.reduce((sum, p) => sum + p.durationS, 0),
+    usesStairs: parts.some((p) => p.usesStairs),
   };
 }
 

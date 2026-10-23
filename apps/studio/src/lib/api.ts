@@ -18,10 +18,47 @@ interface Result<T> {
   response?: Response;
 }
 
+const FIELD_NAMES: Record<string, string> = {
+  email: "Email",
+  name: "Имя",
+  password: "Пароль",
+  currentPassword: "Текущий пароль",
+  newPassword: "Новый пароль",
+  title: "Название",
+  slug: "Адрес",
+  role: "Роль",
+};
+
+interface FieldError {
+  loc?: unknown[];
+  type?: string;
+  ctx?: Record<string, unknown>;
+}
+
+/** FastAPI's 422 item -> a sentence the organizer can act on. */
+function fieldMessage({ loc, type, ctx }: FieldError): string {
+  const key = String(loc?.at(-1) ?? "");
+  const field = FIELD_NAMES[key] ?? "Поле";
+  switch (type) {
+    case "missing":
+      return `${field}: обязательное поле`;
+    case "string_too_short":
+      return `${field}: не короче ${ctx?.min_length} символов`;
+    case "string_too_long":
+      return `${field}: не длиннее ${ctx?.max_length} символов`;
+    default:
+      return key === "email"
+        ? "Проверьте email: адрес не похож на настоящий"
+        : `${field}: неверное значение`;
+  }
+}
+
 function messageOf(error: unknown, status: number): string {
   const detail = (error as { detail?: unknown } | undefined)?.detail;
   if (typeof detail === "string") return detail;
-  if (Array.isArray(detail)) return "Проверьте правильность заполнения полей";
+  if (Array.isArray(detail) && detail.length > 0) {
+    return [...new Set(detail.map((d) => fieldMessage(d as FieldError)))].join(". ");
+  }
   if (status === 0) return "Нет связи с сервером";
   return `Ошибка сервера (${status})`;
 }

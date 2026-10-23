@@ -1,11 +1,13 @@
 import { networkInterfaces } from "node:os";
 import tailwindcss from "@tailwindcss/vite";
-import basicSsl from "@vitejs/plugin-basic-ssl";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// HTTPS=1 pnpm dev — needed for camera/gyroscope (panorama capture) from a phone on the LAN.
-const https = process.env.HTTPS === "1";
+// The studio lives under /studio/ on the same origin as the visitor map: in dev the viewer's
+// server (5173, HTTPS with HTTPS=1) proxies /studio to this one, in production Caddy serves both.
+// One origin means one certificate to accept on a phone, same-origin cookies, and share links
+// that always match the page they were made on. This server is internal: open
+// https://localhost:5173/studio/, not :5174.
 
 /** LAN address for links and QR codes opened on a phone while the desktop uses localhost. */
 function lanHost(): string {
@@ -27,18 +29,29 @@ function lanHost(): string {
   );
 }
 
-const api = { target: "http://localhost:8000", xfwd: true };
+const api = { target: "http://127.0.0.1:8000", xfwd: true };
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), ...(https ? [basicSsl()] : [])],
+  base: "/studio/",
+  plugins: [react(), tailwindcss()],
   define: {
     "import.meta.env.VITE_LAN_HOST": JSON.stringify(process.env.VITE_LAN_HOST ?? lanHost()),
   },
   server: {
-    host: true,
+    host: "127.0.0.1",
     port: 5174,
     strictPort: true,
+    // Only for opening this server directly (http://localhost:5174/studio/) without the viewer.
     proxy: { "/api": api, "/media": api },
+  },
+  // The lazily loaded panorama stack is pre-bundled together, so three.js exists once.
+  optimizeDeps: {
+    include: [
+      "three",
+      "@photo-sphere-viewer/core",
+      "@photo-sphere-viewer/markers-plugin",
+      "@photo-sphere-viewer/equirectangular-tiles-adapter",
+    ],
   },
   // MapLibre's worker is a module worker (see src/lib/maplibre.ts).
   worker: { format: "es" },

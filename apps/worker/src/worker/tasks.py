@@ -75,9 +75,3 @@ def tile_panorama(pano_id: str) -> None:
         log.exception("tiling failed for %s", pano_id)
         db.mark_failed(pano_id, f"Не удалось обработать панораму: {exc}")
         raise
-
-
-@app.task(name="worker.tasks.build_map_version")
-def build_map_version(map_id: str, version_id: str) -> None:
-    """Heavy publish steps (nav graph, visibility) will move here; publish is synchronous now."""
-    raise NotImplementedError("map build is owned by the geo-routing agent")

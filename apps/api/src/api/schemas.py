@@ -1,12 +1,11 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import ConfigDict, EmailStr, Field
 
 from api.models import AccessMode, MemberRole, PanoramaStatus, VersionStatus
+from api.slugs import SLUG_PATTERN
 from map_schema.models import CamelModel, LonLat, MapDocument, PanoTiles
-
-SLUG_PATTERN = r"^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$"
 
 
 class RegisterRequest(CamelModel):
@@ -52,7 +51,7 @@ class MapUpdate(CamelModel):
     slug: str | None = Field(
         None,
         pattern=SLUG_PATTERN,
-        description="Short link /m/{slug}: 3-40 latin letters, digits and dashes",
+        description="Short link /m/{slug}: 3-32 latin letters, digits and dashes",
     )
     access_mode: AccessMode | None = None
 
@@ -93,7 +92,7 @@ class CaptureTokenOut(CamelModel):
 
 
 class PanoramaCreate(CamelModel):
-    level_id: str
+    level_id: str = Field(min_length=1, max_length=64)
     position: LonLat
     heading_deg: float | None = Field(None, description="Compass heading of the first frame")
     title: str | None = Field(None, max_length=200)
@@ -103,7 +102,7 @@ class PanoramaCreate(CamelModel):
 
 
 class PanoramaUpdate(CamelModel):
-    level_id: str | None = None
+    level_id: str | None = Field(None, min_length=1, max_length=64)
     position: LonLat | None = None
     heading_deg: float | None = None
     title: str | None = Field(None, max_length=200)
@@ -174,3 +173,27 @@ class InviteOut(CamelModel):
 
 class InviteAccept(CamelModel):
     token: str
+
+
+class StatDay(CamelModel):
+    day: date
+    views: int
+
+
+class StatCount(CamelModel):
+    key: str
+    label: str
+    count: int
+
+
+class StatsOut(CamelModel):
+    days: list[StatDay]
+    totals: dict[str, int] = Field(
+        description="Per kind: view, poi, route, pano, tour, search, miss"
+    )
+    top_pois: list[StatCount]
+    top_routes: list[StatCount]
+    top_tours: list[StatCount]
+    searches: list[StatCount]
+    misses: list[StatCount] = Field(description="Searches that found nothing")
+    private: bool

@@ -8,10 +8,11 @@ from fastapi import HTTPException, Request, status
 _hits: dict[str, deque[float]] = defaultdict(deque)
 
 
-def limit(request: Request, bucket: str, max_hits: int, window_s: int) -> None:
+def limit(request: Request, bucket: str, max_hits: int, window_s: int, subject: str = "") -> None:
     # request.client is the real peer: uvicorn --proxy-headers resolves it from the proxy chain,
-    # so a client-supplied X-Forwarded-For cannot dodge the limit.
-    key = f"{bucket}:{request.client.host if request.client else '?'}"
+    # so a client-supplied X-Forwarded-For cannot dodge the limit. `subject` narrows the bucket
+    # (an email), so people behind one NAT do not lock each other out.
+    key = f"{bucket}:{request.client.host if request.client else '?'}:{subject}"
     now = time.monotonic()
     hits = _hits[key]
     while hits and hits[0] < now - window_s:

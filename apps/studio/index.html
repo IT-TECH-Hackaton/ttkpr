@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <!-- Theme before the first paint: same key and rule as packages/ui/src/theme.ts -->
+    <script>(() => {let d = false;try {const t = localStorage.getItem("ttk-theme");d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);} catch {}document.documentElement.classList.toggle("dark", d);document.documentElement.style.colorScheme = d ? "dark" : "light";})();</script>
     <title>Студия — Карта пространства</title>
   </head>
   <body>

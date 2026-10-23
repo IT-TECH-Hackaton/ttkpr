@@ -13,16 +13,14 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://ttk:ttk@localhost:5432/ttk"
     redis_url: str = "redis://localhost:6379/0"
 
-    public_base_url: str = "https://localhost"
-    # Cross-origin callers allowed with cookies. Same-origin requests (through the dev proxy
-    # or Caddy) are always allowed, including from a phone on the LAN.
-    cors_origins: list[str] = [
-        "https://localhost",
-        "https://localhost:5173",
-        "https://localhost:5174",
-    ]
+    # Extra origins allowed to call the API with cookies. The viewer and the studio share one
+    # origin (dev proxy, Caddy), and same-origin requests are always allowed — also from a phone
+    # on the LAN — so this is empty unless another site embeds the studio's API.
+    cors_origins: list[str] = []
 
-    # Signs capture tokens (QR "снять с телефона"). Must be set in production.
+    # "production" refuses placeholder secrets at startup.
+    app_env: str = "dev"
+    # Signs capture tokens (QR "снять с телефона") and invites. Must be set in production.
     secret_key: str = "dev-secret-change-me"
     session_cookie: str = "ttk_session"
     session_ttl_days: int = 30

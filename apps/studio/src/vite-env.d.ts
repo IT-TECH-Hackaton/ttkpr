@@ -2,6 +2,6 @@
 
 interface ImportMetaEnv {
   readonly VITE_LAN_HOST?: string;
-  readonly VITE_VIEWER_URL?: string;
-  readonly VITE_STUDIO_URL?: string;
+  /** Public origin of the deployment (tunnel or production), e.g. https://map.example.ru */
+  readonly VITE_PUBLIC_URL?: string;
 }

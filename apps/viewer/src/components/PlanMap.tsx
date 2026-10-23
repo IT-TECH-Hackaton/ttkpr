@@ -1,4 +1,5 @@
 import {
+  applyPlanTheme,
   bundleBounds,
   DEFAULT_GLYPHS,
   LEVEL_FILTERED_LAYERS,
@@ -11,7 +12,9 @@ import {
   SOURCE,
   syncUnderlays,
   toCollections,
+  wallFeatures,
 } from "@ttkpr/map-core";
+import { useTheme } from "@ttkpr/ui";
 import type { GeoJSONSource } from "maplibre-gl";
 import { type ExpressionSpecification, Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useRef } from "react";
@@ -24,6 +27,10 @@ interface Props {
   route?: Route | null;
   /** "Вы здесь" POI from a QR sign. */
   hereId?: string;
+  /** An organizer's tour: numbered stops. */
+  numbered?: boolean;
+  /** Tilted view with walls (fill-extrusion), doors left open. */
+  threeD?: boolean;
   /** Next tap picks a route end: panoramas are not hit-tested, the cursor is a crosshair. */
   picking?: boolean;
   /** Pan to a point (a route step); `n` changes on every request. */
@@ -31,6 +38,8 @@ interface Props {
   /** Pixels covered by overlays, so the selection and the route stay visible. */
   topInset: number;
   bottomInset: number;
+  /** The side panel on wide screens. */
+  leftInset?: number;
   onSelectPoi: (id: string) => void;
   onSelectPano: (id: string) => void;
   onBackgroundTap: (position: LonLat) => void;
@@ -39,6 +48,7 @@ interface Props {
 // Bigger invisible circles: finger-sized hit targets for small markers.
 const HIT_LAYERS = ["pois-hit", "panos-hit"] as const;
 const ROUTE_SOURCE = "route-lines";
+const WALLS_SOURCE = "walls-3d";
 const MARKS_SOURCE = "route-marks";
 const ROUTE_LAYERS = [
   "route-casing",
@@ -46,10 +56,11 @@ const ROUTE_LAYERS = [
   "route-here-halo",
   "route-marks",
   "route-marks-label",
+  "route-marks-number",
 ];
 
 // The level switcher sits on the right.
-const SIDE_INSETS = { left: 16, right: 64 };
+const RIGHT_INSET = 64;
 // Breathing room around a fitted route, on top of the map's own padding (the overlays).
 const FIT_PADDING = 24;
 
@@ -63,10 +74,13 @@ export function PlanMap({
   selectedPoiId,
   route,
   hereId,
+  numbered = false,
+  threeD = false,
   picking,
   focus,
   topInset,
   bottomInset,
+  leftInset = 16,
   onSelectPoi,
   onSelectPano,
   onBackgroundTap,
@@ -76,6 +90,9 @@ export function PlanMap({
   const handlers = useRef({ onSelectPoi, onSelectPano, onBackgroundTap, picking });
   handlers.current = { onSelectPoi, onSelectPano, onBackgroundTap, picking };
   const initialLevel = useRef(levelId);
+  const { dark } = useTheme();
+  const darkRef = useRef(dark);
+  darkRef.current = dark;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -92,6 +109,7 @@ export function PlanMap({
       },
       ...(bounds ? { bounds, fitBoundsOptions: { padding: 32 } } : {}),
       maxZoom: 23,
+      maxPitch: 70,
       attributionControl: false,
       pitchWithRotate: false,
     });
@@ -105,6 +123,7 @@ export function PlanMap({
       map.addSource(SOURCE.pois, { type: "geojson", data: collections.pois });
       map.addSource(SOURCE.panos, { type: "geojson", data: collections.panos });
       map.addSource(SOURCE.connectors, { type: "geojson", data: collections.connectors });
+      map.addSource(SOURCE.paths, { type: "geojson", data: collections.paths });
       for (const layer of planLayers(initialLevel.current)) map.addLayer(layer);
       syncUnderlays(map, bundle.underlays ?? [], initialLevel.current);
 
@@ -136,6 +155,25 @@ export function PlanMap({
         filter,
         paint: { "circle-radius": 20, "circle-opacity": 0 },
       });
+
+      map.addSource(WALLS_SOURCE, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer(
+        {
+          id: "walls-3d",
+          type: "fill-extrusion",
+          source: WALLS_SOURCE,
+          layout: { visibility: "none" },
+          paint: {
+            "fill-extrusion-color": "#cbd5e1",
+            "fill-extrusion-height": ["get", "height"],
+            "fill-extrusion-opacity": 0.9,
+          },
+        },
+        "connectors",
+      );
 
       // The route runs over rooms but under stairs, panoramas and places; its marks go on top.
       const empty = { type: "FeatureCollection" as const, features: [] };
@@ -196,9 +234,15 @@ export function PlanMap({
         source: MARKS_SOURCE,
         filter,
         paint: {
-          "circle-radius": kind({ end: 10, here: 9, floor: 9 }, 8),
+          "circle-radius": kind({ end: 10, here: 9, floor: 9, stop: 10 }, 8),
           "circle-color": kind(
-            { start: "#16a34a", here: "#16a34a", end: "#dc2626", floor: "#7c3aed" },
+            {
+              start: "#16a34a",
+              here: "#16a34a",
+              end: "#dc2626",
+              floor: "#7c3aed",
+              stop: "#2563eb",
+            },
             "#2563eb",
           ),
           "circle-stroke-color": "#ffffff",
@@ -211,7 +255,8 @@ export function PlanMap({
         source: MARKS_SOURCE,
         filter,
         layout: {
-          "text-field": ["get", "label"],
+          // Captions ("Вы здесь", "↑ 2 этаж") above the mark; tour numbers go inside it.
+          "text-field": ["match", ["get", "kind"], ["here", "floor"], ["get", "label"], ""],
           "text-font": PLAN_FONT,
           "text-size": 13,
           "text-offset": [0, -1.3],
@@ -224,7 +269,23 @@ export function PlanMap({
           "text-halo-width": 2,
         },
       });
+      map.addLayer({
+        id: "route-marks-number",
+        type: "symbol",
+        source: MARKS_SOURCE,
+        filter,
+        layout: {
+          "text-field": ["match", ["get", "kind"], ["start", "stop", "end"], ["get", "label"], ""],
+          "text-font": PLAN_FONT,
+          "text-size": 12,
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
+        },
+        paint: { "text-color": "#ffffff" },
+      });
     });
+
+    map.once("load", () => applyPlanTheme(map, darkRef.current));
 
     map.on("click", (event) => {
       const { picking } = handlers.current;
@@ -262,19 +323,47 @@ export function PlanMap({
     const map = mapRef.current;
     if (!map) return;
     const apply = () => {
-      const { lines, marks } = routeFeatures(bundle, route ?? null, hereId);
+      const { lines, marks } = routeFeatures(bundle, route ?? null, hereId, numbered);
       map.getSource<GeoJSONSource>(ROUTE_SOURCE)?.setData(lines);
       map.getSource<GeoJSONSource>(MARKS_SOURCE)?.setData(marks);
     };
     if (map.getSource(ROUTE_SOURCE)) apply();
     else map.once("load", apply);
-  }, [bundle, route, hereId]);
+  }, [bundle, route, hereId, numbered]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map?.isStyleLoaded()) applyPlanTheme(map, dark);
+  }, [dark]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      if (!map.getLayer("walls-3d")) return;
+      if (threeD)
+        map.getSource<GeoJSONSource>(WALLS_SOURCE)?.setData(wallFeatures(bundle, levelId));
+      map.setLayoutProperty("walls-3d", "visibility", threeD ? "visible" : "none");
+      map.easeTo(
+        threeD
+          ? { pitch: 55, bearing: -20, duration: 600 }
+          : { pitch: 0, bearing: 0, duration: 400 },
+      );
+    };
+    if (map.getLayer("walls-3d")) apply();
+    else map.once("load", apply);
+  }, [threeD, levelId, bundle]);
 
   // The overlays as the map's own padding: centring, easing and fitting all keep clear of them.
   // (Passing padding to easeTo would store it too, and fitBounds would then count it twice.)
   useEffect(() => {
-    mapRef.current?.setPadding({ top: topInset, bottom: bottomInset, ...SIDE_INSETS });
-  }, [topInset, bottomInset]);
+    mapRef.current?.setPadding({
+      top: topInset,
+      bottom: bottomInset,
+      left: leftInset,
+      right: RIGHT_INSET,
+    });
+  }, [topInset, bottomInset, leftInset]);
 
   // Show the whole route on the current floor whenever it changes or the floor does.
   useEffect(() => {

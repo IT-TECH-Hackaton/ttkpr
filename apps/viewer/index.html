@@ -7,6 +7,8 @@
     <meta name="description" content="Интерактивная карта площадки: план, панорамы и маршруты" />
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <!-- Theme before the first paint: same key and rule as packages/ui/src/theme.ts -->
+    <script>(() => {let d = false;try {const t = localStorage.getItem("ttk-theme");d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);} catch {}document.documentElement.classList.toggle("dark", d);document.documentElement.style.colorScheme = d ? "dark" : "light";})();</script>
     <title>Карта пространства</title>
   </head>
   <body>

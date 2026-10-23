@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { logout, logoutEverywhere } from "@ttkpr/api-client";
+import { ThemeSwitch } from "@ttkpr/ui";
 import { LogOut, Map as MapIcon, MonitorSmartphone, UserRound } from "lucide-react";
 import { unwrap } from "../lib/api";
 import { meQueryKey, useMe } from "../lib/session";
@@ -83,6 +84,10 @@ export function UserMenu() {
           >
             Мои карты
           </MenuItem>
+          <div className="px-3 py-2">
+            <p className="pb-1.5 text-xs text-muted">Тема</p>
+            <ThemeSwitch />
+          </div>
           <MenuDivider />
           <MenuItem icon={<LogOut />} onClick={() => void signOut(false)}>
             Выйти

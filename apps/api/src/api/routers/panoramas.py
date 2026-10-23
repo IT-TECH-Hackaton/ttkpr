@@ -4,6 +4,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Form, HTTPException, Request, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from pydantic import ValidationError
 from sqlalchemy import select
 
@@ -107,7 +108,8 @@ async def upload_frame(
 
     data = await read_limited(file, max_mb=10)
     ensure_image(data, jpeg_only=True)
-    get_storage().put(f"captures/{pano_id}/{index:02d}.jpg", reencode_jpeg(data))
+    jpeg = await run_in_threadpool(reencode_jpeg, data)
+    get_storage().put(f"captures/{pano_id}/{index:02d}.jpg", jpeg)
     frames = dict(pano.capture_meta.get("frames", {}))
     frames[str(index)] = frame.model_dump(mode="json", by_alias=True)
     pano.capture_meta = {**pano.capture_meta, "frames": frames}
@@ -120,6 +122,10 @@ async def upload_frame(
 async def start_stitching(pano_id: uuid.UUID, request: Request, db: DbSession) -> PanoramaOut:
     pano = await _load(db, pano_id)
     await capture_map(request, db, pano.map_id)
+    if pano.status == PanoramaStatus.PROCESSING:
+        return to_out(pano)  # already started: the phone retried after a lost response
+    if pano.status not in (PanoramaStatus.UPLOADING, PanoramaStatus.FAILED):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Панорама уже готова")
     frames = pano.capture_meta.get("frames", {})
     if len(frames) < MIN_FRAMES:
         raise HTTPException(
@@ -129,7 +135,7 @@ async def start_stitching(pano_id: uuid.UUID, request: Request, db: DbSession) -
     pano.progress = 0
     pano.frame_count = len(frames)
     await db.commit()
-    queue.enqueue("worker.tasks.stitch_panorama", str(pano.id))
+    await _enqueue_or_fail(db, pano, "worker.tasks.stitch_panorama")
     return to_out(pano)
 
 
@@ -141,7 +147,7 @@ async def start_stitching(pano_id: uuid.UUID, request: Request, db: DbSession) -
 async def upload_panorama(
     map_id: uuid.UUID,
     file: UploadFile,
-    level_id: Annotated[str, Form(alias="levelId")],
+    level_id: Annotated[str, Form(alias="levelId", min_length=1, max_length=64)],
     lon: Annotated[float, Form()],
     lat: Annotated[float, Form()],
     db: DbSession,
@@ -163,9 +169,10 @@ async def upload_panorama(
     )
     db.add(pano)
     await db.flush()
-    get_storage().put(f"panos/{pano.id}/source.jpg", reencode_jpeg(data))
+    jpeg = await run_in_threadpool(reencode_jpeg, data)
+    get_storage().put(f"panos/{pano.id}/source.jpg", jpeg)
     await db.commit()
-    queue.enqueue("worker.tasks.tile_panorama", str(pano.id))
+    await _enqueue_or_fail(db, pano, "worker.tasks.tile_panorama")
     return to_out(pano)
 
 
@@ -203,3 +210,14 @@ async def delete_panorama(pano_id: uuid.UUID, db: DbSession, user: CurrentUser) 
     storage = get_storage()
     for prefix in (f"captures/{pano_id}", f"panos/{pano_id}"):
         shutil.rmtree(storage.path(prefix), ignore_errors=True)
+
+
+async def _enqueue_or_fail(db: DbSession, pano: Panorama, task: str) -> None:
+    """A queue outage marks the panorama failed (retryable) instead of stuck in processing."""
+    try:
+        await run_in_threadpool(queue.enqueue, task, str(pano.id))
+    except HTTPException:
+        pano.status = PanoramaStatus.FAILED
+        pano.error = "Очередь обработки недоступна — попробуйте ещё раз"
+        await db.commit()
+        raise

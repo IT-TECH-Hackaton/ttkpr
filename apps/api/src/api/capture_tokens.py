@@ -37,10 +37,3 @@ def verify(token: str, map_id: uuid.UUID) -> uuid.UUID | None:
         return uuid.UUID(user_hex)
     except ValueError:
         return None
-
-
-def map_of(token: str) -> uuid.UUID | None:
-    try:
-        return uuid.UUID(token.split(".", 1)[0])
-    except ValueError:
-        return None

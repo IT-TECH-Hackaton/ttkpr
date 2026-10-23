@@ -67,3 +67,21 @@ async def test_cross_origin_write_is_rejected(client: AsyncClient, register: Reg
         "/api/maps", json={"title": "CSRF"}, headers={"Origin": "https://evil.example"}
     )
     assert response.status_code == 403
+
+
+def test_slugify_transliterates_and_fits_the_column() -> None:
+    from api.slugs import SLUG_MAX, is_valid, slugify
+
+    assert slugify("Отель «Сокол» — 2 этаж") == "otel-sokol-2-etazh"
+    assert slugify("Щёлково, ДК «Юность»") == "schelkovo-dk-yunost"
+    long = slugify("Очень длинное название площадки для большого форума")
+    assert len(long) <= SLUG_MAX and is_valid(long)
+    assert not is_valid("a" * 33)
+
+
+async def test_new_maps_get_readable_addresses(client: AsyncClient, register: Register) -> None:
+    await register("slugs@example.com")
+    first = (await client.post("/api/maps", json={"title": "Отель Сокол"})).json()
+    second = (await client.post("/api/maps", json={"title": "Отель Сокол"})).json()
+    assert first["slug"] == "otel-sokol"
+    assert second["slug"].startswith("otel-sokol-") and second["slug"] != first["slug"]

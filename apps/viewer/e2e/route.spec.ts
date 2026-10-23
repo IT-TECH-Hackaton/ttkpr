@@ -34,3 +34,13 @@ test("picks the start by tapping the plan", async ({ page }) => {
   await page.mouse.click(20, 200);
   await expect(page.getByText("Здесь нет прохода")).toBeVisible();
 });
+
+test("opens an organizer's tour across the yard to the second building", async ({ page }) => {
+  await page.goto("/m/demo");
+  await page.getByRole("button", { name: /Обход хакатона/ }).click();
+  await expect(page.getByText("Маршрут организатора")).toBeVisible();
+  const steps = page.getByRole("list", { name: "Шаги маршрута" });
+  await expect(steps).toContainText("Точка 2 из 6: «Шатёр партнёров»");
+  await expect(steps).toContainText("Поднимитесь по лестнице на 2 этаж");
+  await expect(steps).toContainText("Вы на месте: «Менторы»");
+});

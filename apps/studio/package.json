@@ -10,6 +10,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@photo-sphere-viewer/core": "^5.15.1",
+    "@photo-sphere-viewer/equirectangular-tiles-adapter": "^5.15.1",
+    "@photo-sphere-viewer/markers-plugin": "^5.15.1",
     "@tanstack/react-query": "^5.104.5",
     "@tanstack/react-router": "^1.170.45",
     "@ttkpr/api-client": "workspace:*",
@@ -23,6 +26,7 @@
     "react-dom": "^19.3.1",
     "terra-draw": "^1.38.0",
     "terra-draw-maplibre-gl-adapter": "^1.5.0",
+    "three": "^0.186.1",
     "zundo": "^2.3.0",
     "zustand": "^5.0.16"
   },
@@ -33,7 +37,6 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "tailwindcss": "^4.3.3",
     "vite": "^8.3.5",
