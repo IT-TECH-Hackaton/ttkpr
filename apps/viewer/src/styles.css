@@ -1,0 +1,35 @@
+@import "@ttkpr/ui/styles.css";
+@import "maplibre-gl/dist/maplibre-gl.css";
+
+@source "../../../packages/ui/src";
+
+.safe-top {
+  padding-top: max(12px, env(safe-area-inset-top));
+}
+
+.safe-bottom {
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
+.maplibregl-canvas {
+  touch-action: none;
+}
+
+.pano-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.92);
+  color: #111827;
+  font: 600 13px / 1 var(--font-sans);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.25);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pano-marker--link {
+  background: rgb(37 99 235 / 0.9);
+  color: #ffffff;
+}

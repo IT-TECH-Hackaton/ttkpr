@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "viewer",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@ttkpr/viewer", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "studio",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@ttkpr/studio", "dev"],
+      "port": 5174
+    }
+  ]
+}

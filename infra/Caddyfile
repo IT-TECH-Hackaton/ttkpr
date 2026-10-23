@@ -1,0 +1,51 @@
+# Local: https://localhost (viewer) and https://studio.localhost (studio), Caddy's internal CA.
+# Production: set VIEWER_HOST / STUDIO_HOST to real domains and Caddy fetches certificates.
+
+(security) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(self), gyroscope=(self), accelerometer=(self), magnetometer=(self), geolocation=(self)"
+		-Server
+	}
+}
+
+(api) {
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+}
+
+{$VIEWER_HOST:localhost} {
+	import security
+	encode zstd gzip
+	import api
+
+	handle {
+		root * /srv/viewer
+		# Versioned bundles, pano tiles and hashed assets never change.
+		@immutable path_regexp ^/(assets/|demo/v[0-9]+/|demo/pano-[^/]+/)
+		header @immutable Cache-Control "public, max-age=31536000, immutable"
+		# The manifest is the only mutable file of a published map.
+		@manifest path */manifest.json
+		header @manifest Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+{$STUDIO_HOST:studio.localhost} {
+	import security
+	header Content-Security-Policy "frame-ancestors 'none'"
+	encode zstd gzip
+	import api
+
+	handle {
+		root * /srv/studio
+		@immutable path /assets/*
+		header @immutable Cache-Control "public, max-age=31536000, immutable"
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+/* Shared tokens for viewer and studio. Components use these, never raw colors. */
+@theme {
+  --color-bg: #ffffff;
+  --color-surface: #f6f7f9;
+  --color-fg: #111827;
+  --color-muted: #6b7280;
+  --color-border: #e5e7eb;
+  --color-accent: #2563eb;
+  --color-accent-fg: #ffffff;
+  --color-danger: #dc2626;
+  --radius-sheet: 20px;
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0b0f17;
+    --color-surface: #151b26;
+    --color-fg: #f3f4f6;
+    --color-muted: #9ca3af;
+    --color-border: #263042;
+    --color-accent: #60a5fa;
+    --color-accent-fg: #0b0f17;
+  }
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+
+  button {
+    touch-action: manipulation;
+  }
+}

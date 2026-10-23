@@ -1,0 +1,21 @@
+{
+  "name": "@ttkpr/map-core",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ttkpr/api-client": "workspace:*",
+    "maplibre-gl": "^6.15.0"
+  },
+  "devDependencies": {
+    "@types/geojson": "^7946.0.16",
+    "@types/node": "^26.6.5",
+    "vitest": "^5.0.5"
+  }
+}

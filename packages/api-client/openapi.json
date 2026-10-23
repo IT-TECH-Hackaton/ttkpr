@@ -1,0 +1,1255 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Карта пространства API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Register",
+        "operationId": "register",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login",
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout",
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Me",
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/maps": {
+      "get": {
+        "tags": [
+          "maps"
+        ],
+        "summary": "List Maps",
+        "operationId": "list_maps",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MapSummary"
+                  },
+                  "type": "array",
+                  "title": "Response List Maps"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "maps"
+        ],
+        "summary": "Create Map",
+        "operationId": "create_map",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MapCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MapSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/maps/{map_id}/draft": {
+      "get": {
+        "tags": [
+          "maps"
+        ],
+        "summary": "Get Draft",
+        "operationId": "get_draft",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Map Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "maps"
+        ],
+        "summary": "Save Draft",
+        "operationId": "save_draft",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Map Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftSave"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/maps/{map_id}/publish": {
+      "post": {
+        "tags": [
+          "maps"
+        ],
+        "summary": "Publish",
+        "operationId": "publish",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Map Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccessMode": {
+        "type": "string",
+        "enum": [
+          "public",
+          "link",
+          "password",
+          "private"
+        ],
+        "title": "AccessMode"
+      },
+      "Building": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Building"
+      },
+      "Connector": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ConnectorKind"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorPoint"
+            },
+            "type": "array",
+            "minItems": 2,
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "points"
+        ],
+        "title": "Connector"
+      },
+      "ConnectorKind": {
+        "type": "string",
+        "enum": [
+          "stairs",
+          "elevator",
+          "escalator",
+          "ramp"
+        ],
+        "title": "ConnectorKind"
+      },
+      "ConnectorPoint": {
+        "properties": {
+          "levelId": {
+            "type": "string",
+            "title": "Levelid"
+          },
+          "position": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Position"
+          }
+        },
+        "type": "object",
+        "required": [
+          "levelId",
+          "position"
+        ],
+        "title": "ConnectorPoint"
+      },
+      "DraftOut": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/MapDocument"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document",
+          "version"
+        ],
+        "title": "DraftOut"
+      },
+      "DraftSave": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/MapDocument"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "description": "Version the client edited; 409 if it is stale"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document",
+          "version"
+        ],
+        "title": "DraftSave"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Level": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "buildingId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Buildingid"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "ordinal": {
+            "type": "integer",
+            "title": "Ordinal",
+            "description": "0 = ground floor, negative = basement"
+          },
+          "heightM": {
+            "type": "number",
+            "title": "Heightm",
+            "default": 3.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "ordinal"
+        ],
+        "title": "Level"
+      },
+      "LineStringGeometry": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "LineString",
+            "title": "Type",
+            "default": "LineString"
+          },
+          "coordinates": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "minItems": 2,
+            "title": "Coordinates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "coordinates"
+        ],
+        "title": "LineStringGeometry"
+      },
+      "LoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest"
+      },
+      "MapCreate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "anchor": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Anchor",
+            "default": [
+              37.6176,
+              55.7558
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "MapCreate"
+      },
+      "MapDocument": {
+        "properties": {
+          "schemaVersion": {
+            "type": "integer",
+            "title": "Schemaversion",
+            "default": 1
+          },
+          "venue": {
+            "$ref": "#/components/schemas/Venue"
+          },
+          "buildings": {
+            "items": {
+              "$ref": "#/components/schemas/Building"
+            },
+            "type": "array",
+            "title": "Buildings",
+            "default": []
+          },
+          "levels": {
+            "items": {
+              "$ref": "#/components/schemas/Level"
+            },
+            "type": "array",
+            "title": "Levels",
+            "default": []
+          },
+          "units": {
+            "items": {
+              "$ref": "#/components/schemas/Unit"
+            },
+            "type": "array",
+            "title": "Units",
+            "default": []
+          },
+          "openings": {
+            "items": {
+              "$ref": "#/components/schemas/Opening"
+            },
+            "type": "array",
+            "title": "Openings",
+            "default": []
+          },
+          "connectors": {
+            "items": {
+              "$ref": "#/components/schemas/Connector"
+            },
+            "type": "array",
+            "title": "Connectors",
+            "default": []
+          },
+          "pois": {
+            "items": {
+              "$ref": "#/components/schemas/Poi"
+            },
+            "type": "array",
+            "title": "Pois",
+            "default": []
+          },
+          "panos": {
+            "items": {
+              "$ref": "#/components/schemas/Pano"
+            },
+            "type": "array",
+            "title": "Panos",
+            "default": []
+          },
+          "paths": {
+            "items": {
+              "$ref": "#/components/schemas/PathLine"
+            },
+            "type": "array",
+            "title": "Paths",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "venue"
+        ],
+        "title": "MapDocument"
+      },
+      "MapSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "accessMode": {
+            "$ref": "#/components/schemas/AccessMode"
+          },
+          "draftVersion": {
+            "type": "integer",
+            "title": "Draftversion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "accessMode",
+          "draftVersion"
+        ],
+        "title": "MapSummary"
+      },
+      "Opening": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "levelId": {
+            "type": "string",
+            "title": "Levelid"
+          },
+          "category": {
+            "$ref": "#/components/schemas/OpeningCategory",
+            "default": "door"
+          },
+          "geometry": {
+            "$ref": "#/components/schemas/LineStringGeometry"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "levelId",
+          "geometry"
+        ],
+        "title": "Opening"
+      },
+      "OpeningCategory": {
+        "type": "string",
+        "enum": [
+          "door",
+          "passage",
+          "entrance"
+        ],
+        "title": "OpeningCategory"
+      },
+      "Pano": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "levelId": {
+            "type": "string",
+            "title": "Levelid"
+          },
+          "position": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Position"
+          },
+          "headingDeg": {
+            "type": "number",
+            "title": "Headingdeg",
+            "description": "Azimuth (clockwise from north) of the image center, yaw = 0",
+            "default": 0.0
+          },
+          "cameraHeightM": {
+            "type": "number",
+            "title": "Cameraheightm",
+            "default": 1.5
+          },
+          "status": {
+            "$ref": "#/components/schemas/PanoStatus",
+            "default": "processing"
+          },
+          "tiles": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PanoTiles"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "levelId",
+          "position"
+        ],
+        "title": "Pano"
+      },
+      "PanoStatus": {
+        "type": "string",
+        "enum": [
+          "uploading",
+          "processing",
+          "ready",
+          "failed"
+        ],
+        "title": "PanoStatus"
+      },
+      "PanoTileLevel": {
+        "properties": {
+          "width": {
+            "type": "integer",
+            "title": "Width"
+          },
+          "cols": {
+            "type": "integer",
+            "title": "Cols"
+          },
+          "rows": {
+            "type": "integer",
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "width",
+          "cols",
+          "rows"
+        ],
+        "title": "PanoTileLevel"
+      },
+      "PanoTiles": {
+        "properties": {
+          "baseUrl": {
+            "type": "string",
+            "title": "Baseurl",
+            "description": "Directory URL; tiles live at {baseUrl}/{width}/{row}_{col}.webp"
+          },
+          "previewUrl": {
+            "type": "string",
+            "title": "Previewurl"
+          },
+          "tileSize": {
+            "type": "integer",
+            "title": "Tilesize",
+            "default": 512
+          },
+          "levels": {
+            "items": {
+              "$ref": "#/components/schemas/PanoTileLevel"
+            },
+            "type": "array",
+            "title": "Levels"
+          }
+        },
+        "type": "object",
+        "required": [
+          "baseUrl",
+          "previewUrl",
+          "levels"
+        ],
+        "title": "PanoTiles"
+      },
+      "PathLine": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "levelId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Levelid",
+            "description": "None = outdoor path"
+          },
+          "geometry": {
+            "$ref": "#/components/schemas/LineStringGeometry"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "geometry"
+        ],
+        "title": "PathLine"
+      },
+      "Poi": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "levelId": {
+            "type": "string",
+            "title": "Levelid"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "position": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Position"
+          },
+          "heightM": {
+            "type": "number",
+            "title": "Heightm",
+            "description": "Height above floor, used for pano projection",
+            "default": 1.2
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "levelId",
+          "name",
+          "category",
+          "position"
+        ],
+        "title": "Poi"
+      },
+      "PolygonGeometry": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "Polygon",
+            "title": "Type",
+            "default": "Polygon"
+          },
+          "coordinates": {
+            "items": {
+              "items": {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Coordinates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "coordinates"
+        ],
+        "title": "PolygonGeometry"
+      },
+      "PublishOut": {
+        "properties": {
+          "versionId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Versionid"
+          },
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "status": {
+            "$ref": "#/components/schemas/VersionStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "versionId",
+          "number",
+          "status"
+        ],
+        "title": "PublishOut"
+      },
+      "RegisterRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 8,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "name",
+          "password"
+        ],
+        "title": "RegisterRequest"
+      },
+      "Unit": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "levelId": {
+            "type": "string",
+            "title": "Levelid"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "category": {
+            "$ref": "#/components/schemas/UnitCategory"
+          },
+          "walkable": {
+            "type": "boolean",
+            "title": "Walkable",
+            "default": true
+          },
+          "geometry": {
+            "$ref": "#/components/schemas/PolygonGeometry"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "levelId",
+          "category",
+          "geometry"
+        ],
+        "title": "Unit"
+      },
+      "UnitCategory": {
+        "type": "string",
+        "enum": [
+          "room",
+          "corridor",
+          "lobby",
+          "hall",
+          "restroom",
+          "stairs",
+          "elevator",
+          "outdoor",
+          "nonpublic"
+        ],
+        "title": "UnitCategory"
+      },
+      "UserOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "name"
+        ],
+        "title": "UserOut"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "Venue": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "anchor": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Anchor",
+            "description": "Origin of the local ENU frame (lon, lat)"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "anchor"
+        ],
+        "title": "Venue"
+      },
+      "VersionStatus": {
+        "type": "string",
+        "enum": [
+          "building",
+          "ready",
+          "failed"
+        ],
+        "title": "VersionStatus"
+      }
+    }
+  }
+}

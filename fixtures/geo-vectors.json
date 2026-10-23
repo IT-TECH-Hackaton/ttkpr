@@ -1,0 +1,108 @@
+{
+  "_comment": "Shared test vectors for map-core (TS) and map-schema (Python). Angles in degrees, distances in meters.",
+  "toLocal": [
+    { "anchor": [37.6, 55.75], "point": [37.601, 55.75], "expected": [62.6512, 0] },
+    { "anchor": [37.6, 55.75], "point": [37.6, 55.751], "expected": [0, 111.3195] }
+  ],
+  "projectToPano": [
+    {
+      "name": "north, level",
+      "pano": [0, 0],
+      "heading": 0,
+      "cameraHeight": 1.5,
+      "target": [0, 10],
+      "targetHeight": 1.5,
+      "yaw": 0,
+      "pitch": 0
+    },
+    {
+      "name": "east",
+      "pano": [0, 0],
+      "heading": 0,
+      "cameraHeight": 1.5,
+      "target": [10, 0],
+      "targetHeight": 1.5,
+      "yaw": 90,
+      "pitch": 0
+    },
+    {
+      "name": "west",
+      "pano": [0, 0],
+      "heading": 0,
+      "cameraHeight": 1.5,
+      "target": [-10, 0],
+      "targetHeight": 1.5,
+      "yaw": -90,
+      "pitch": 0
+    },
+    {
+      "name": "south wraps to +180",
+      "pano": [0, 0],
+      "heading": 0,
+      "cameraHeight": 1.5,
+      "target": [0, -10],
+      "targetHeight": 1.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    {
+      "name": "heading east, target east",
+      "pano": [0, 0],
+      "heading": 90,
+      "cameraHeight": 1.5,
+      "target": [10, 0],
+      "targetHeight": 1.5,
+      "yaw": 0,
+      "pitch": 0
+    },
+    {
+      "name": "heading 350, target NE",
+      "pano": [0, 0],
+      "heading": 350,
+      "cameraHeight": 1.5,
+      "target": [10, 10],
+      "targetHeight": 1.5,
+      "yaw": 55,
+      "pitch": 0
+    },
+    {
+      "name": "floor at camera-height distance",
+      "pano": [0, 0],
+      "heading": 0,
+      "cameraHeight": 1.5,
+      "target": [0, 1.5],
+      "targetHeight": 0,
+      "yaw": 0,
+      "pitch": -45
+    },
+    {
+      "name": "offset pano",
+      "pano": [5, 5],
+      "heading": 0,
+      "cameraHeight": 1.5,
+      "target": [5, 15],
+      "targetHeight": 1.5,
+      "yaw": 0,
+      "pitch": 0
+    }
+  ],
+  "floorFromPano": [
+    {
+      "pano": [2, 3],
+      "heading": 0,
+      "cameraHeight": 1.5,
+      "yaw": 90,
+      "pitch": -45,
+      "expected": [3.5, 3]
+    },
+    {
+      "pano": [0, 0],
+      "heading": 90,
+      "cameraHeight": 1.5,
+      "yaw": 0,
+      "pitch": -45,
+      "expected": [1.5, 0]
+    },
+    { "pano": [0, 0], "heading": 0, "cameraHeight": 1.5, "yaw": 0, "pitch": 10, "expected": null }
+  ]
+}

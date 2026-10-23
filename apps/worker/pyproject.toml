@@ -1,0 +1,25 @@
+[project]
+name = "worker"
+version = "0.1.0"
+description = "Worker: stitching, tiling, map builds"
+authors = [
+    { name = "ETsETs777", email = "cymbalzena087@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.43.118",
+    "celery[redis]>=5.6.3",
+    "map-schema",
+    "numpy>=2.5.4",
+    "opencv-python-headless>=5.0.0.93",
+    "pyvips[binary]>=3.2.0",
+    "scipy>=1.18.1",
+    "shapely>=2.2.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+map-schema = { workspace = true }

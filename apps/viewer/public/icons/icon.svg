@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>Карта пространства</title>
+  <rect width="512" height="512" rx="112" fill="#2563eb"/>
+  <path d="M128 168h112v80H128zM272 168h112v176H272zM128 280h112v64H128z" fill="#ffffff" opacity="0.92"/>
+  <circle cx="328" cy="236" r="34" fill="#f59e0b" stroke="#ffffff" stroke-width="10"/>
+</svg>

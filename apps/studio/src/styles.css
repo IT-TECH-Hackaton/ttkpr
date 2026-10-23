@@ -1,0 +1,8 @@
+@import "@ttkpr/ui/styles.css";
+@import "maplibre-gl/dist/maplibre-gl.css";
+
+@source "../../../packages/ui/src";
+
+.maplibregl-canvas {
+  touch-action: none;
+}

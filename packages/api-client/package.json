@@ -1,0 +1,19 @@
+{
+  "name": "@ttkpr/api-client",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "gen": "openapi-ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "^0.99.0",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  }
+}

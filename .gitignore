@@ -1,0 +1,33 @@
+# JS
+node_modules/
+dist/
+.turbo/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Секреты и локальные настройки
+.env
+.env.local
+.env.*.local
+.env.production
+*.pem
+*.key
+.claude/settings.local.json
+
+# Данные (съёмки, тома контейнеров)
+data/
+infra/volumes/
+
+# Системное
+.DS_Store
+Thumbs.db
+*.log

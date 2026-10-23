@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "ttk",
+      "credentials": [{ "accessKey": "ttk-local", "secretKey": "ttk-local-secret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

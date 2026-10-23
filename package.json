@@ -1,0 +1,22 @@
+{
+  "name": "ttkpr",
+  "private": true,
+  "packageManager": "pnpm@12.15.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "gen:api": "uv run --package api python -m api.export_openapi packages/api-client/openapi.json && pnpm --filter @ttkpr/api-client gen"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.2",
+    "turbo": "^2.11.10",
+    "typescript": "^7.0.2"
+  }
+}

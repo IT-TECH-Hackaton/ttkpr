@@ -1,0 +1,6 @@
+packages:
+  - apps/viewer
+  - apps/studio
+  - packages/map-core
+  - packages/ui
+  - packages/api-client

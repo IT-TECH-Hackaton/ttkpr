@@ -1,0 +1,33 @@
+# Only the backing services, for local development of api/worker/frontends on the host:
+#   docker compose -f infra/docker-compose.dev.yml up -d
+name: ttkpr-dev
+
+services:
+  postgres:
+    image: postgis/postgis:17-3.5
+    environment:
+      POSTGRES_USER: ttk
+      POSTGRES_PASSWORD: ttk
+      POSTGRES_DB: ttk
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "6379:6379"
+
+  s3:
+    image: chrislusf/seaweedfs:4.48
+    command: ["server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/etc/seaweedfs/s3.json"]
+    volumes:
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+      - s3-data:/data
+    ports:
+      - "8333:8333"
+
+volumes:
+  postgres-data:
+  s3-data:
