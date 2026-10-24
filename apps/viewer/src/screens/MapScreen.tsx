@@ -13,7 +13,7 @@ import {
   sortedLevels,
 } from "@ttkpr/map-core";
 import { Button, cn, ThemeSwitch, useTheme } from "@ttkpr/ui";
-import { Box } from "lucide-react";
+import { Box, Trees } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { LevelSwitcher } from "../components/LevelSwitcher";
 import { OfflineControl } from "../components/OfflineControl";
@@ -28,6 +28,7 @@ import { usePoiSearch } from "../lib/search";
 import { track } from "../lib/stats";
 import { useMediaQuery, WIDE_QUERY } from "../lib/useMediaQuery";
 import { useOnline } from "../lib/useOnline";
+import { useStoredFlag } from "../lib/useStoredFlag";
 import { type MapSearch, mapRoute } from "../router";
 
 const PanoView = lazy(() => import("../components/PanoView"));
@@ -90,6 +91,7 @@ export function MapScreen() {
   const [focus, setFocus] = useState<{ position: LonLat; n: number }>();
   const [auto, setAuto] = useState(false);
   const [threeD, setThreeD] = useState(false);
+  const [nature, setNature] = useStoredFlag("ttkpr.nature", true);
   const [dollhouse, setDollhouse] = useState(false);
   const { dark } = useTheme();
 
@@ -316,6 +318,19 @@ export function MapScreen() {
       </button>
       <button
         type="button"
+        aria-pressed={nature}
+        aria-label="Деревья и газон вокруг зданий"
+        title={nature ? "Скрыть деревья и газон" : "Показать деревья и газон"}
+        onClick={() => setNature(!nature)}
+        className={cn(
+          "grid size-12 place-items-center rounded-2xl border border-border shadow-lg",
+          nature ? "bg-accent text-accent-fg" : "bg-bg text-fg",
+        )}
+      >
+        <Trees className="size-5" aria-hidden />
+      </button>
+      <button
+        type="button"
         aria-label="3D-макет этажа по фотографиям"
         title="3D-макет: стены и пол из панорам"
         onClick={() => setDollhouse(true)}
@@ -383,6 +398,7 @@ export function MapScreen() {
         hereId={herePoi?.id}
         numbered={tour !== undefined}
         threeD={threeD}
+        nature={nature}
         picking={picking !== null}
         focus={focus}
         topInset={insets.top}

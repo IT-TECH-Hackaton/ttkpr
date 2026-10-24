@@ -10,6 +10,47 @@ export type ClientOptions = {
 export type AccessMode = 'public' | 'link' | 'password' | 'private';
 
 /**
+ * Amenity
+ */
+export type Amenity = 'wifi' | 'power' | 'accessible' | 'toilet' | 'water' | 'food' | 'quiet' | 'kids' | 'ac' | 'projector' | 'parking' | 'firstaid' | 'info';
+
+/**
+ * Announcement
+ *
+ * A banner for visitors, shown between `start` and `end` (open ends: always).
+ */
+export type Announcement = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Text
+     */
+    text: string;
+    kind?: AnnouncementKind;
+    /**
+     * Start
+     */
+    start?: string | null;
+    /**
+     * End
+     */
+    end?: string | null;
+    /**
+     * Poiid
+     *
+     * Tapping opens this place
+     */
+    poiId?: string | null;
+};
+
+/**
+ * AnnouncementKind
+ */
+export type AnnouncementKind = 'info' | 'warning' | 'success';
+
+/**
  * AssetOut
  */
 export type AssetOut = {
@@ -25,6 +66,16 @@ export type AssetOut = {
      * Height
      */
     height: number;
+};
+
+/**
+ * Body_create_plan_import
+ */
+export type BodyCreatePlanImport = {
+    /**
+     * File
+     */
+    file: Blob | File;
 };
 
 /**
@@ -77,6 +128,32 @@ export type BodyUploadPanorama = {
      * Headingdeg
      */
     headingDeg?: number;
+};
+
+/**
+ * Branding
+ */
+export type Branding = {
+    /**
+     * Accentcolor
+     */
+    accentColor?: string | null;
+    /**
+     * Logourl
+     */
+    logoUrl?: string | null;
+    /**
+     * Coverurl
+     */
+    coverUrl?: string | null;
+    /**
+     * Welcometitle
+     */
+    welcomeTitle?: string | null;
+    /**
+     * Welcometext
+     */
+    welcomeText?: string | null;
 };
 
 /**
@@ -151,6 +228,35 @@ export type ConnectorPoint = {
 };
 
 /**
+ * CustomCategory
+ *
+ * An organizer's POI category, in addition to the built-in ones (same id overrides one).
+ */
+export type CustomCategory = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Emoji
+     */
+    emoji?: string | null;
+    /**
+     * Color
+     */
+    color?: string | null;
+};
+
+/**
+ * DoorKind
+ */
+export type DoorKind = 'single' | 'double' | 'sliding' | 'revolving' | 'automatic';
+
+/**
  * DraftOut
  */
 export type DraftOut = {
@@ -173,6 +279,49 @@ export type DraftSave = {
      */
     version: number;
 };
+
+/**
+ * Fixture
+ *
+ * Furniture and fittings inside a room (IMDF «fixture»): tables, booths, a stage, columns.
+ *
+ * Obstacles are holes in the floor for routing: routes go around them, never across.
+ */
+export type Fixture = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Levelid
+     */
+    levelId: string;
+    kind: FixtureKind;
+    /**
+     * Name
+     */
+    name?: string | null;
+    geometry: PolygonGeometry;
+    /**
+     * Heightm
+     *
+     * For 3D; a default per kind if unset
+     */
+    heightM?: number | null;
+    /**
+     * Obstacle
+     */
+    obstacle?: boolean;
+    /**
+     * Color
+     */
+    color?: string | null;
+};
+
+/**
+ * FixtureKind
+ */
+export type FixtureKind = 'table' | 'booth' | 'stage' | 'counter' | 'seating' | 'screen' | 'plant' | 'column' | 'shelf' | 'kiosk' | 'other';
 
 /**
  * HTTPValidationError
@@ -262,6 +411,73 @@ export type LineStringGeometry = {
 };
 
 /**
+ * LiveOut
+ */
+export type LiveOut = {
+    /**
+     * Updatedat
+     *
+     * Latest change; null when nothing is set
+     */
+    updatedAt: string | null;
+    /**
+     * Places
+     *
+     * Status by POI id
+     */
+    places: {
+        [key: string]: LivePlace;
+    };
+};
+
+/**
+ * LivePlace
+ */
+export type LivePlace = {
+    status: PlaceStatus;
+    /**
+     * Note
+     */
+    note: string | null;
+    /**
+     * Updatedat
+     */
+    updatedAt: string;
+};
+
+/**
+ * LivePlaceOut
+ */
+export type LivePlaceOut = {
+    status: PlaceStatus;
+    /**
+     * Note
+     */
+    note: string | null;
+    /**
+     * Updatedat
+     */
+    updatedAt: string;
+    /**
+     * Poiid
+     */
+    poiId: string;
+};
+
+/**
+ * LiveUpdate
+ */
+export type LiveUpdate = {
+    status: PlaceStatus;
+    /**
+     * Note
+     *
+     * Short note for visitors, e.g. «очередь ~10 минут»
+     */
+    note?: string | null;
+};
+
+/**
  * LoginRequest
  */
 export type LoginRequest = {
@@ -341,6 +557,14 @@ export type MapDocument = {
      * Underlays
      */
     underlays?: Array<Underlay>;
+    /**
+     * Fixtures
+     */
+    fixtures?: Array<Fixture>;
+    /**
+     * Zones
+     */
+    zones?: Array<Zone>;
 };
 
 /**
@@ -395,6 +619,9 @@ export type MapUpdate = {
      * Short link /m/{slug}: 3-32 latin letters, digits and dashes
      */
     slug?: string | null;
+    /**
+     * "password" is not supported yet and is refused with 422
+     */
     accessMode?: AccessMode | null;
 };
 
@@ -460,12 +687,42 @@ export type Opening = {
     levelId: string;
     category?: OpeningCategory;
     geometry: LineStringGeometry;
+    access?: OpeningAccess;
+    /**
+     * Door type; revolving doors are not step-free
+     */
+    kind?: DoorKind | null;
+    /**
+     * Widthm
+     *
+     * Clear width of a door when it differs from the drawing; < 0.8 m is not step-free
+     */
+    widthM?: number | null;
+    /**
+     * Sillheightm
+     *
+     * Window only: sill above the floor (default 0.9)
+     */
+    sillHeightM?: number | null;
+    /**
+     * Heightm
+     *
+     * Window only: height of the glazing (default 1.2)
+     */
+    heightM?: number | null;
 };
+
+/**
+ * OpeningAccess
+ *
+ * Routes use only public openings; windows are never passable.
+ */
+export type OpeningAccess = 'public' | 'staff' | 'emergency' | 'locked';
 
 /**
  * OpeningCategory
  */
-export type OpeningCategory = 'door' | 'passage' | 'entrance';
+export type OpeningCategory = 'door' | 'passage' | 'entrance' | 'window';
 
 /**
  * Pano
@@ -715,6 +972,46 @@ export type PathLine = {
 };
 
 /**
+ * PlaceStatus
+ */
+export type PlaceStatus = 'open' | 'busy' | 'closed';
+
+/**
+ * PlanImportOut
+ */
+export type PlanImportOut = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Mapid
+     */
+    mapId: string;
+    status: ScanStatus;
+    /**
+     * Progress
+     */
+    progress: number;
+    /**
+     * Error
+     */
+    error: string | null;
+    /**
+     * Result
+     *
+     * Worker output: {pages: [{width, height, floor, imageUrl, sourcePage, rooms: [{ring, name, category, center}], openings: [{a, b, category, rooms}]}], connectors: [{kind, rooms: [{page, room}]}], metersPerPixel, ocr, warnings}. Coordinates are fractions of the page image (x right, y down).
+     */
+    result: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Createdat
+     */
+    createdAt: string;
+};
+
+/**
  * Poi
  */
 export type Poi = {
@@ -751,6 +1048,115 @@ export type Poi = {
      * Height above floor, used for pano projection
      */
     heightM?: number;
+    /**
+     * Photos
+     */
+    photos?: Array<string>;
+    /**
+     * Links
+     */
+    links?: Array<PoiLink>;
+    contacts?: PoiContacts | null;
+    /**
+     * Hours
+     */
+    hours?: string | null;
+    /**
+     * Tags
+     */
+    tags?: Array<string>;
+    /**
+     * Featured
+     *
+     * Shown first to visitors
+     */
+    featured?: boolean;
+    /**
+     * Events
+     */
+    events?: Array<PoiEvent>;
+    /**
+     * Translations
+     *
+     * Up to 5 languages, keyed by code (en, zh, ...)
+     */
+    translations?: {
+        [key: string]: Translation;
+    };
+};
+
+/**
+ * PoiContacts
+ */
+export type PoiContacts = {
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Telegram
+     *
+     * User name without @ (https://t.me/<name>)
+     */
+    telegram?: string | null;
+    /**
+     * Website
+     */
+    website?: string | null;
+};
+
+/**
+ * PoiEvent
+ *
+ * A talk, a show, a session at this place. Times carry their offset.
+ */
+export type PoiEvent = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Start
+     *
+     * ISO 8601 date-time with an offset, e.g. 2026-10-24T18:00:00+03:00
+     */
+    start: string;
+    /**
+     * End
+     *
+     * ISO 8601 date-time with an offset, e.g. 2026-10-24T18:00:00+03:00
+     */
+    end: string;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Speaker
+     */
+    speaker?: string | null;
+};
+
+/**
+ * PoiLink
+ */
+export type PoiLink = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Url
+     */
+    url: string;
 };
 
 /**
@@ -838,6 +1244,54 @@ export type RegisterRequest = {
      */
     password: string;
 };
+
+/**
+ * RoomScanOut
+ */
+export type RoomScanOut = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Mapid
+     */
+    mapId: string;
+    /**
+     * Levelid
+     */
+    levelId: string;
+    status: ScanStatus;
+    /**
+     * Progress
+     */
+    progress: number;
+    /**
+     * Error
+     */
+    error: string | null;
+    /**
+     * Cameraheightm
+     */
+    cameraHeightM: number;
+    /**
+     * Result
+     *
+     * Worker output: {polygon: [[x, y], ...] (metres), heightM, areaM2, cameraPath, pointCount, quality}
+     */
+    result: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Createdat
+     */
+    createdAt: string;
+};
+
+/**
+ * ScanStatus
+ */
+export type ScanStatus = 'uploading' | 'processing' | 'ready' | 'failed';
 
 /**
  * StatCount
@@ -946,6 +1400,22 @@ export type Tour = {
 };
 
 /**
+ * Translation
+ *
+ * Name and description in another language; missing parts fall back to the original.
+ */
+export type Translation = {
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Description
+     */
+    description?: string | null;
+};
+
+/**
  * Underlay
  *
  * Raster plan placed under the drawing (uploaded image), per level.
@@ -1014,7 +1484,60 @@ export type Unit = {
      */
     walkable?: boolean;
     geometry: PolygonGeometry;
+    /**
+     * staff / closed rooms are not walkable (like walkable: false)
+     */
+    access?: UnitAccess;
+    /**
+     * Heightm
+     *
+     * Ceiling height; level height if unset
+     */
+    heightM?: number | null;
+    /**
+     * Color
+     *
+     * Fill on the plan
+     */
+    color?: string | null;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Photos
+     */
+    photos?: Array<string>;
+    /**
+     * Capacity
+     */
+    capacity?: number | null;
+    /**
+     * Amenities
+     */
+    amenities?: Array<Amenity>;
+    /**
+     * Hours
+     *
+     * Opening hours as text, e.g. «Пн–Пт 9:00–18:00»
+     */
+    hours?: string | null;
+    /**
+     * Translations
+     *
+     * Up to 5 languages, keyed by code (en, zh, ...)
+     */
+    translations?: {
+        [key: string]: Translation;
+    };
 };
+
+/**
+ * UnitAccess
+ *
+ * Who may enter. Routes go only through public rooms.
+ */
+export type UnitAccess = 'public' | 'staff' | 'closed';
 
 /**
  * UnitCategory
@@ -1092,12 +1615,70 @@ export type Venue = {
      * Address
      */
     address?: string | null;
+    branding?: Branding | null;
+    /**
+     * Announcements
+     */
+    announcements?: Array<Announcement>;
+    /**
+     * Categories
+     */
+    categories?: Array<CustomCategory>;
+    /**
+     * Timezone
+     *
+     * IANA time zone of the venue: schedules and opening hours are shown in it
+     */
+    timezone?: string;
+    /**
+     * Languages
+     *
+     * Languages offered to visitors, the one of the base texts first (ru if empty)
+     */
+    languages?: Array<string>;
 };
 
 /**
  * VersionStatus
  */
 export type VersionStatus = 'building' | 'ready' | 'failed';
+
+/**
+ * Zone
+ *
+ * A labelled area inside rooms (фудкорт, зона тишины). Does not affect routes.
+ */
+export type Zone = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Levelid
+     */
+    levelId: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Color
+     */
+    color?: string | null;
+    geometry: PolygonGeometry;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Translations
+     *
+     * Up to 5 languages, keyed by code (en, zh, ...)
+     */
+    translations?: {
+        [key: string]: Translation;
+    };
+};
 
 export type HealthData = {
     body?: never;
@@ -1891,6 +2472,66 @@ export type UploadPanoramaResponses = {
 
 export type UploadPanoramaResponse = UploadPanoramaResponses[keyof UploadPanoramaResponses];
 
+export type UploadPanoramaVideoData = {
+    /**
+     * VideoPanoramaForm
+     */
+    body: {
+        /**
+         * Video: WebM, MP4 or MOV (MediaRecorder), up to 300 MB
+         */
+        file: Blob | File;
+        /**
+         * Optional JSON file: {"samples": [{"t": seconds, "q": [w, x, y, z]}], "fovDeg": number | null}, up to 20000 samples; q is camera -> world, OpenCV camera axes, world z up
+         */
+        orientation?: Blob | File;
+        /**
+         * Levelid
+         */
+        levelId: string;
+        /**
+         * Lon
+         */
+        lon: number;
+        /**
+         * Lat
+         */
+        lat: number;
+        /**
+         * Headingdeg
+         *
+         * Compass heading at the start of the video
+         */
+        headingDeg?: number | null;
+    };
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/panoramas/video';
+};
+
+export type UploadPanoramaVideoErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadPanoramaVideoError = UploadPanoramaVideoErrors[keyof UploadPanoramaVideoErrors];
+
+export type UploadPanoramaVideoResponses = {
+    /**
+     * Successful Response
+     */
+    201: PanoramaOut;
+};
+
+export type UploadPanoramaVideoResponse = UploadPanoramaVideoResponses[keyof UploadPanoramaVideoResponses];
+
 export type DeletePanoramaData = {
     body?: never;
     path: {
@@ -1980,6 +2621,338 @@ export type UpdatePanoramaResponses = {
 };
 
 export type UpdatePanoramaResponse = UpdatePanoramaResponses[keyof UpdatePanoramaResponses];
+
+export type ListScansData = {
+    body?: never;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/scans';
+};
+
+export type ListScansErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListScansError = ListScansErrors[keyof ListScansErrors];
+
+export type ListScansResponses = {
+    /**
+     * Response List Scans
+     *
+     * Successful Response
+     */
+    200: Array<RoomScanOut>;
+};
+
+export type ListScansResponse = ListScansResponses[keyof ListScansResponses];
+
+export type CreateScanData = {
+    /**
+     * RoomScanForm
+     */
+    body: {
+        /**
+         * Video: WebM, MP4 or MOV (MediaRecorder), up to 300 MB
+         */
+        file: Blob | File;
+        /**
+         * Optional JSON file: {"samples": [{"t": seconds, "q": [w, x, y, z]}], "fovDeg": number | null}, up to 20000 samples; q is camera -> world, OpenCV camera axes, world z up
+         */
+        orientation?: Blob | File;
+        /**
+         * Levelid
+         */
+        levelId: string;
+        /**
+         * Cameraheightm
+         *
+         * Height of the phone above the floor while walking
+         */
+        cameraHeightM?: number;
+    };
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/scans';
+};
+
+export type CreateScanErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateScanError = CreateScanErrors[keyof CreateScanErrors];
+
+export type CreateScanResponses = {
+    /**
+     * Successful Response
+     */
+    201: RoomScanOut;
+};
+
+export type CreateScanResponse = CreateScanResponses[keyof CreateScanResponses];
+
+export type DeleteScanData = {
+    body?: never;
+    path: {
+        /**
+         * Scan Id
+         */
+        scan_id: string;
+    };
+    query?: never;
+    url: '/api/scans/{scan_id}';
+};
+
+export type DeleteScanErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteScanError = DeleteScanErrors[keyof DeleteScanErrors];
+
+export type DeleteScanResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteScanResponse = DeleteScanResponses[keyof DeleteScanResponses];
+
+export type GetScanData = {
+    body?: never;
+    path: {
+        /**
+         * Scan Id
+         */
+        scan_id: string;
+    };
+    query?: never;
+    url: '/api/scans/{scan_id}';
+};
+
+export type GetScanErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetScanError = GetScanErrors[keyof GetScanErrors];
+
+export type GetScanResponses = {
+    /**
+     * Successful Response
+     */
+    200: RoomScanOut;
+};
+
+export type GetScanResponse = GetScanResponses[keyof GetScanResponses];
+
+export type CreatePlanImportData = {
+    body: BodyCreatePlanImport;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/plan-imports';
+};
+
+export type CreatePlanImportErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreatePlanImportError = CreatePlanImportErrors[keyof CreatePlanImportErrors];
+
+export type CreatePlanImportResponses = {
+    /**
+     * Successful Response
+     */
+    201: PlanImportOut;
+};
+
+export type CreatePlanImportResponse = CreatePlanImportResponses[keyof CreatePlanImportResponses];
+
+export type GetPlanImportData = {
+    body?: never;
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/plan-imports/{job_id}';
+};
+
+export type GetPlanImportErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetPlanImportError = GetPlanImportErrors[keyof GetPlanImportErrors];
+
+export type GetPlanImportResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlanImportOut;
+};
+
+export type GetPlanImportResponse = GetPlanImportResponses[keyof GetPlanImportResponses];
+
+export type ClearLiveStatusData = {
+    body?: never;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+        /**
+         * Poi Id
+         */
+        poi_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/live/{poi_id}';
+};
+
+export type ClearLiveStatusErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClearLiveStatusError = ClearLiveStatusErrors[keyof ClearLiveStatusErrors];
+
+export type ClearLiveStatusResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type ClearLiveStatusResponse = ClearLiveStatusResponses[keyof ClearLiveStatusResponses];
+
+export type SetLiveStatusData = {
+    body: LiveUpdate;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+        /**
+         * Poi Id
+         */
+        poi_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/live/{poi_id}';
+};
+
+export type SetLiveStatusErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SetLiveStatusError = SetLiveStatusErrors[keyof SetLiveStatusErrors];
+
+export type SetLiveStatusResponses = {
+    /**
+     * Successful Response
+     */
+    200: LivePlaceOut;
+};
+
+export type SetLiveStatusResponse = SetLiveStatusResponses[keyof SetLiveStatusResponses];
+
+export type ListLiveData = {
+    body?: never;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/live';
+};
+
+export type ListLiveErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListLiveError = ListLiveErrors[keyof ListLiveErrors];
+
+export type ListLiveResponses = {
+    /**
+     * Successful Response
+     */
+    200: LiveOut;
+};
+
+export type ListLiveResponse = ListLiveResponses[keyof ListLiveResponses];
+
+export type GetLiveData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/public/maps/{slug}/live.json';
+};
+
+export type GetLiveErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetLiveError = GetLiveErrors[keyof GetLiveErrors];
+
+export type GetLiveResponses = {
+    /**
+     * Successful Response
+     */
+    200: LiveOut;
+};
+
+export type GetLiveResponse = GetLiveResponses[keyof GetLiveResponses];
 
 export type GetManifestData = {
     body?: never;

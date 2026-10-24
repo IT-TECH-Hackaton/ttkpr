@@ -73,6 +73,8 @@ interface DraftState {
   addUnit: (ring: Position[]) => void;
   /** Many rooms at once (plan recognition): one undo step. */
   addUnits: (rings: Position[][]) => void;
+  /** A whole new document at once (plan import): one undo step, then show `levelId`. */
+  replaceDoc: (doc: MapDocument, levelId: string) => void;
   addPoi: (position: Position) => void;
   addOpening: (a: Position, b: Position) => void;
   addConnector: (position: Position) => void;
@@ -186,6 +188,7 @@ export const useDraft = create<DraftState>()(
           // The tool stays active: draw room after room, rename them in the panel.
           return { doc: { ...s.doc, units: [...(s.doc.units ?? []), unit] }, selectedId: unit.id };
         }),
+      replaceDoc: (doc, levelId) => set({ doc, levelId, selectedId: null, tool: "select" }),
       addUnits: (rings) =>
         set((s) => {
           const start = (s.doc.units?.length ?? 0) + 1;

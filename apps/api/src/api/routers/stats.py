@@ -27,7 +27,7 @@ async def record_events(slug: str, request: Request, db: DbSession) -> Response:
 
     Body: {"events": [{"kind": "poi", "key": "p-coffee"}, ...]}. Unknown kinds are dropped.
     """
-    ratelimit.limit(request, "events", max_hits=120, window_s=60)
+    await ratelimit.limit(request, "events", max_hits=120, window_s=60)
     raw = await request.body()
     if len(raw) > MAX_BODY:
         raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Слишком много событий")

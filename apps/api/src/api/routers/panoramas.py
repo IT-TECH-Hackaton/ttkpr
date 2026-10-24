@@ -8,14 +8,33 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import ValidationError
 from sqlalchemy import select
 
-from api import queue
+from api import queue, ratelimit
 from api.access import capture_map, member_map
 from api.deps import CurrentUser, DbSession
 from api.models import Panorama, PanoramaStatus
 from api.permissions import Permission
-from api.schemas import FrameMeta, PanoramaCreate, PanoramaOut, PanoramaUpdate
+from api.schemas import (
+    FrameMeta,
+    PanoramaCreate,
+    PanoramaOut,
+    PanoramaUpdate,
+    VideoPanoramaForm,
+)
 from api.storage import get_storage
-from api.uploads import ensure_image, read_limited, reencode_jpeg
+from api.uploads import (
+    VIDEO_PARTS,
+    VIDEO_UPLOADS,
+    VIDEO_UPLOADS_WINDOW_S,
+    check_video,
+    discard,
+    ensure_image,
+    multipart_body,
+    read_limited,
+    read_orientation,
+    reencode_jpeg,
+    store_video,
+    video_form,
+)
 from map_schema.models import PanoTiles
 
 router = APIRouter(tags=["panoramas"])
@@ -109,7 +128,13 @@ async def upload_frame(
     data = await read_limited(file, max_mb=10)
     ensure_image(data, jpeg_only=True)
     jpeg = await run_in_threadpool(reencode_jpeg, data)
-    get_storage().put(f"captures/{pano_id}/{index:02d}.jpg", jpeg)
+    await run_in_threadpool(get_storage().put, f"captures/{pano_id}/{index:02d}.jpg", jpeg)
+    # The phone sends frames in parallel: re-read the row under a lock (held only for this
+    # update, not the re-encoding), or each upload writes back the frame list it read and the
+    # others' frames are lost.
+    await db.refresh(pano, with_for_update=True)
+    if pano.status != PanoramaStatus.UPLOADING:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Съёмка уже завершена")
     frames = dict(pano.capture_meta.get("frames", {}))
     frames[str(index)] = frame.model_dump(mode="json", by_alias=True)
     pano.capture_meta = {**pano.capture_meta, "frames": frames}
@@ -118,24 +143,35 @@ async def upload_frame(
     return to_out(pano)
 
 
+# Failed panoramas of these sources are retried as they are: their input is already stored.
+RETRY_TASKS = {"video": "worker.tasks.stitch_video", "upload": "worker.tasks.tile_panorama"}
+
+
 @router.post("/api/panoramas/{pano_id}/stitch", response_model=PanoramaOut)
 async def start_stitching(pano_id: uuid.UUID, request: Request, db: DbSession) -> PanoramaOut:
+    """Stitches the uploaded frames; for a failed video or uploaded panorama, tries again."""
     pano = await _load(db, pano_id)
     await capture_map(request, db, pano.map_id)
+    # Same lock as uploadFrame: a frame still being saved is either counted or refused.
+    await db.refresh(pano, with_for_update=True)
     if pano.status == PanoramaStatus.PROCESSING:
         return to_out(pano)  # already started: the phone retried after a lost response
     if pano.status not in (PanoramaStatus.UPLOADING, PanoramaStatus.FAILED):
         raise HTTPException(status.HTTP_409_CONFLICT, "Панорама уже готова")
-    frames = pano.capture_meta.get("frames", {})
-    if len(frames) < MIN_FRAMES:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, f"Нужно хотя бы {MIN_FRAMES} кадров"
-        )
+    task = RETRY_TASKS.get(pano.source)
+    if task is None:
+        frames = pano.capture_meta.get("frames", {})
+        if len(frames) < MIN_FRAMES:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, f"Нужно хотя бы {MIN_FRAMES} кадров"
+            )
+        pano.frame_count = len(frames)
+        task = "worker.tasks.stitch_panorama"
     pano.status = PanoramaStatus.PROCESSING
     pano.progress = 0
-    pano.frame_count = len(frames)
+    pano.error = None
     await db.commit()
-    await _enqueue_or_fail(db, pano, "worker.tasks.stitch_panorama")
+    await queue.enqueue_or_fail(db, pano, task)
     return to_out(pano)
 
 
@@ -170,9 +206,54 @@ async def upload_panorama(
     db.add(pano)
     await db.flush()
     jpeg = await run_in_threadpool(reencode_jpeg, data)
-    get_storage().put(f"panos/{pano.id}/source.jpg", jpeg)
+    await run_in_threadpool(get_storage().put, f"panos/{pano.id}/source.jpg", jpeg)
     await db.commit()
-    await _enqueue_or_fail(db, pano, "worker.tasks.tile_panorama")
+    await queue.enqueue_or_fail(db, pano, "worker.tasks.tile_panorama")
+    return to_out(pano)
+
+
+@router.post(
+    "/api/maps/{map_id}/panoramas/video",
+    response_model=PanoramaOut,
+    status_code=status.HTTP_201_CREATED,
+    openapi_extra=multipart_body(VideoPanoramaForm, VIDEO_PARTS, ("file",)),
+)
+async def upload_panorama_video(map_id: uuid.UUID, request: Request, db: DbSession) -> PanoramaOut:
+    """Panorama from a video: stand in the middle and turn around once, phone upright.
+
+    Same access as the photo capture: organizer session or the QR token (X-Capture-Token).
+    Stored as captures/{id}/video.{webm|mp4|mov} (+ orientation.json), never served;
+    worker.tasks.stitch_video makes the equirect and tiles, progress as for photo captures.
+    """
+    await capture_map(request, db, map_id)
+    await ratelimit.limit(
+        request, "video", VIDEO_UPLOADS, VIDEO_UPLOADS_WINDOW_S, subject=str(map_id)
+    )
+    # Hand the DB connection back while the video streams in (minutes on a slow network).
+    await db.commit()
+    pano_id = uuid.uuid4()
+    async with video_form(request, VideoPanoramaForm) as (fields, file, orientation):
+        container = await check_video(file)
+        track = await read_orientation(orientation) if orientation else None
+        stored = await store_video(file, container, track, f"captures/{pano_id}")
+    pano = Panorama(
+        id=pano_id,
+        map_id=map_id,
+        level_id=fields.level_id,
+        lon=fields.lon,
+        lat=fields.lat,
+        heading_deg=(fields.heading_deg or 0.0) % 360,
+        source="video",
+        status=PanoramaStatus.PROCESSING,
+        capture_meta={**stored, "fovDeg": track.fov_deg if track else None},
+    )
+    try:
+        db.add(pano)
+        await db.commit()
+    except BaseException:
+        discard(f"captures/{pano_id}")
+        raise
+    await queue.enqueue_or_fail(db, pano, "worker.tasks.stitch_video")
     return to_out(pano)
 
 
@@ -210,14 +291,3 @@ async def delete_panorama(pano_id: uuid.UUID, db: DbSession, user: CurrentUser) 
     storage = get_storage()
     for prefix in (f"captures/{pano_id}", f"panos/{pano_id}"):
         shutil.rmtree(storage.path(prefix), ignore_errors=True)
-
-
-async def _enqueue_or_fail(db: DbSession, pano: Panorama, task: str) -> None:
-    """A queue outage marks the panorama failed (retryable) instead of stuck in processing."""
-    try:
-        await run_in_threadpool(queue.enqueue, task, str(pano.id))
-    except HTTPException:
-        pano.status = PanoramaStatus.FAILED
-        pano.error = "Очередь обработки недоступна — попробуйте ещё раз"
-        await db.commit()
-        raise

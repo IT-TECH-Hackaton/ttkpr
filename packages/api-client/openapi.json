@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Карта пространства API",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "paths": {
     "/api/health": {
@@ -1130,6 +1130,7 @@
           "panoramas"
         ],
         "summary": "Start Stitching",
+        "description": "Stitches the uploaded frames; for a failed video or uploaded panorama, tries again.",
         "operationId": "start_stitching",
         "parameters": [
           {
@@ -1215,6 +1216,109 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/maps/{map_id}/panoramas/video": {
+      "post": {
+        "tags": [
+          "panoramas"
+        ],
+        "summary": "Upload Panorama Video",
+        "description": "Panorama from a video: stand in the middle and turn around once, phone upright.\n\nSame access as the photo capture: organizer session or the QR token (X-Capture-Token).\nStored as captures/{id}/video.{webm|mp4|mov} (+ orientation.json), never served;\nworker.tasks.stitch_video makes the equirect and tiles, progress as for photo captures.",
+        "operationId": "upload_panorama_video",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Map Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PanoramaOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "title": "VideoPanoramaForm",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "contentMediaType": "application/octet-stream",
+                    "description": "Video: WebM, MP4 or MOV (MediaRecorder), up to 300 MB"
+                  },
+                  "orientation": {
+                    "type": "string",
+                    "contentMediaType": "application/octet-stream",
+                    "description": "Optional JSON file: {\"samples\": [{\"t\": seconds, \"q\": [w, x, y, z]}], \"fovDeg\": number | null}, up to 20000 samples; q is camera -> world, OpenCV camera axes, world z up"
+                  },
+                  "levelId": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "title": "Levelid",
+                    "type": "string"
+                  },
+                  "lon": {
+                    "maximum": 180,
+                    "minimum": -180,
+                    "title": "Lon",
+                    "type": "number"
+                  },
+                  "lat": {
+                    "maximum": 90,
+                    "minimum": -90,
+                    "title": "Lat",
+                    "type": "number"
+                  },
+                  "headingDeg": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Compass heading at the start of the video",
+                    "title": "Headingdeg"
+                  }
+                },
+                "required": [
+                  "file",
+                  "levelId",
+                  "lon",
+                  "lat"
+                ]
               }
             }
           }
@@ -1349,12 +1453,520 @@
         }
       }
     },
+    "/api/maps/{map_id}/scans": {
+      "post": {
+        "tags": [
+          "scans"
+        ],
+        "summary": "Create Scan",
+        "description": "Video of one room, filmed walking along the walls with the camera at chest height.",
+        "operationId": "create_scan",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Map Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomScanOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "title": "RoomScanForm",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "contentMediaType": "application/octet-stream",
+                    "description": "Video: WebM, MP4 or MOV (MediaRecorder), up to 300 MB"
+                  },
+                  "orientation": {
+                    "type": "string",
+                    "contentMediaType": "application/octet-stream",
+                    "description": "Optional JSON file: {\"samples\": [{\"t\": seconds, \"q\": [w, x, y, z]}], \"fovDeg\": number | null}, up to 20000 samples; q is camera -> world, OpenCV camera axes, world z up"
+                  },
+                  "levelId": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "title": "Levelid",
+                    "type": "string"
+                  },
+                  "cameraHeightM": {
+                    "default": 1.5,
+                    "description": "Height of the phone above the floor while walking",
+                    "maximum": 3.0,
+                    "minimum": 0.3,
+                    "title": "Cameraheightm",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "file",
+                  "levelId"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "scans"
+        ],
+        "summary": "List Scans",
+        "description": "Newest first. Also with the QR capture token, so the phone can show what it sent.",
+        "operationId": "list_scans",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Map Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoomScanOut"
+                  },
+                  "title": "Response List Scans"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scans/{scan_id}": {
+      "get": {
+        "tags": [
+          "scans"
+        ],
+        "summary": "Get Scan",
+        "description": "Polled while the worker runs: status, progress, then the result.",
+        "operationId": "get_scan",
+        "parameters": [
+          {
+            "name": "scan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Scan Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomScanOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "scans"
+        ],
+        "summary": "Delete Scan",
+        "operationId": "delete_scan",
+        "parameters": [
+          {
+            "name": "scan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Scan Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/maps/{map_id}/plan-imports": {
+      "post": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Create Plan Import",
+        "description": "Start recognising a plan: an image or a PDF with one floor per page (up to 12).",
+        "operationId": "create_plan_import",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Map Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_plan_import"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanImportOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/plan-imports/{job_id}": {
+      "get": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Get Plan Import",
+        "description": "Polled while the worker runs: status, progress, then the recognised plan.",
+        "operationId": "get_plan_import",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanImportOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/maps/{map_id}/live/{poi_id}": {
+      "put": {
+        "tags": [
+          "live"
+        ],
+        "summary": "Set Live Status",
+        "operationId": "set_live_status",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Map Id"
+            }
+          },
+          {
+            "name": "poi_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "title": "Poi Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiveUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivePlaceOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "live"
+        ],
+        "summary": "Clear Live Status",
+        "description": "Back to no status. Idempotent: clearing a place without one is fine.",
+        "operationId": "clear_live_status",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Map Id"
+            }
+          },
+          {
+            "name": "poi_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "title": "Poi Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/maps/{map_id}/live": {
+      "get": {
+        "tags": [
+          "live"
+        ],
+        "summary": "List Live",
+        "description": "For the studio, also before the map is published.",
+        "operationId": "list_live",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Map Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/maps/{slug}/live.json": {
+      "get": {
+        "tags": [
+          "live"
+        ],
+        "summary": "Get Live",
+        "description": "Statuses of the published map for visitors; members only for private maps.",
+        "operationId": "get_live",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveOut"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (If-None-Match matched the ETag)"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/public/maps/{slug}/manifest.json": {
       "get": {
         "tags": [
           "public"
         ],
         "summary": "Get Manifest",
+        "description": "Points at the current version. Public maps: the static bundle under /media, served by\nCaddy and cached forever; members-only maps: the API route that checks the session.",
         "operationId": "get_manifest",
         "parameters": [
           {
@@ -1378,6 +1990,9 @@
               }
             }
           },
+          "304": {
+            "description": "Not modified (If-None-Match matched the ETag)"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1397,6 +2012,7 @@
           "public"
         ],
         "summary": "Get Bundle",
+        "description": "Kept for members-only maps and for manifests saved (offline) before static bundles.",
         "operationId": "get_bundle",
         "parameters": [
           {
@@ -1546,6 +2162,100 @@
         ],
         "title": "AccessMode"
       },
+      "Amenity": {
+        "type": "string",
+        "enum": [
+          "wifi",
+          "power",
+          "accessible",
+          "toilet",
+          "water",
+          "food",
+          "quiet",
+          "kids",
+          "ac",
+          "projector",
+          "parking",
+          "firstaid",
+          "info"
+        ],
+        "title": "Amenity"
+      },
+      "Announcement": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+            "title": "Id"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Text"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AnnouncementKind",
+            "default": "info"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]{1,9})?)?([Zz]|[+-][0-9]{2}:?[0-9]{2})$",
+                "description": "ISO 8601 date-time with an offset, e.g. 2026-10-24T18:00:00+03:00"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]{1,9})?)?([Zz]|[+-][0-9]{2}:?[0-9]{2})$",
+                "description": "ISO 8601 date-time with an offset, e.g. 2026-10-24T18:00:00+03:00"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "poiId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poiid",
+            "description": "Tapping opens this place"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "Announcement",
+        "description": "A banner for visitors, shown between `start` and `end` (open ends: always)."
+      },
+      "AnnouncementKind": {
+        "type": "string",
+        "enum": [
+          "info",
+          "warning",
+          "success"
+        ],
+        "title": "AnnouncementKind"
+      },
       "AssetOut": {
         "properties": {
           "url": {
@@ -1568,6 +2278,20 @@
           "height"
         ],
         "title": "AssetOut"
+      },
+      "Body_create_plan_import": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_create_plan_import"
       },
       "Body_upload_asset": {
         "properties": {
@@ -1638,6 +2362,77 @@
           "lat"
         ],
         "title": "Body_upload_panorama"
+      },
+      "Branding": {
+        "properties": {
+          "accentColor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 7,
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accentcolor"
+          },
+          "logoUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^(https://[^\\s/?#<>\\\"'`\\\\@:]+(:[0-9]{1,5})?([/?#][^\\s<>\\\"'`\\\\]*)?|/media/[A-Za-z0-9._~/-]+)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logourl"
+          },
+          "coverUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^(https://[^\\s/?#<>\\\"'`\\\\@:]+(:[0-9]{1,5})?([/?#][^\\s<>\\\"'`\\\\]*)?|/media/[A-Za-z0-9._~/-]+)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverurl"
+          },
+          "welcomeTitle": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Welcometitle"
+          },
+          "welcomeText": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Welcometext"
+          }
+        },
+        "type": "object",
+        "title": "Branding"
       },
       "Building": {
         "properties": {
@@ -1751,6 +2546,66 @@
         ],
         "title": "ConnectorPoint"
       },
+      "CustomCategory": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 32,
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16,
+                "pattern": "^[^\\s<>]{1,16}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 7,
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "CustomCategory",
+        "description": "An organizer's POI category, in addition to the built-in ones (same id overrides one)."
+      },
+      "DoorKind": {
+        "type": "string",
+        "enum": [
+          "single",
+          "double",
+          "sliding",
+          "revolving",
+          "automatic"
+        ],
+        "title": "DoorKind"
+      },
       "DraftOut": {
         "properties": {
           "document": {
@@ -1785,6 +2640,99 @@
           "version"
         ],
         "title": "DraftSave"
+      },
+      "Fixture": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+            "title": "Id"
+          },
+          "levelId": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Levelid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/FixtureKind"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "geometry": {
+            "$ref": "#/components/schemas/PolygonGeometry"
+          },
+          "heightM": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 50.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heightm",
+            "description": "For 3D; a default per kind if unset"
+          },
+          "obstacle": {
+            "type": "boolean",
+            "title": "Obstacle",
+            "default": true
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 7,
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "levelId",
+          "kind",
+          "geometry"
+        ],
+        "title": "Fixture",
+        "description": "Furniture and fittings inside a room (IMDF «fixture»): tables, booths, a stage, columns.\n\nObstacles are holes in the floor for routing: routes go around them, never across."
+      },
+      "FixtureKind": {
+        "type": "string",
+        "enum": [
+          "table",
+          "booth",
+          "stage",
+          "counter",
+          "seating",
+          "screen",
+          "plant",
+          "column",
+          "shelf",
+          "kiosk",
+          "other"
+        ],
+        "title": "FixtureKind"
       },
       "HTTPValidationError": {
         "properties": {
@@ -1917,6 +2865,127 @@
         ],
         "title": "LineStringGeometry"
       },
+      "LiveOut": {
+        "properties": {
+          "updatedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updatedat",
+            "description": "Latest change; null when nothing is set"
+          },
+          "places": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/LivePlace"
+            },
+            "type": "object",
+            "title": "Places",
+            "description": "Status by POI id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "updatedAt",
+          "places"
+        ],
+        "title": "LiveOut"
+      },
+      "LivePlace": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/PlaceStatus"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updatedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "note",
+          "updatedAt"
+        ],
+        "title": "LivePlace"
+      },
+      "LivePlaceOut": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/PlaceStatus"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updatedat"
+          },
+          "poiId": {
+            "type": "string",
+            "title": "Poiid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "note",
+          "updatedAt",
+          "poiId"
+        ],
+        "title": "LivePlaceOut"
+      },
+      "LiveUpdate": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/PlaceStatus"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 140
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note",
+            "description": "Short note for visitors, e.g. «очередь ~10 минут»"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "LiveUpdate"
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -1974,7 +3043,7 @@
           "schemaVersion": {
             "type": "integer",
             "title": "Schemaversion",
-            "default": 1
+            "default": 2
           },
           "venue": {
             "$ref": "#/components/schemas/Venue"
@@ -2058,6 +3127,22 @@
             "type": "array",
             "title": "Underlays",
             "default": []
+          },
+          "fixtures": {
+            "items": {
+              "$ref": "#/components/schemas/Fixture"
+            },
+            "type": "array",
+            "maxItems": 5000,
+            "title": "Fixtures"
+          },
+          "zones": {
+            "items": {
+              "$ref": "#/components/schemas/Zone"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "title": "Zones"
           }
         },
         "type": "object",
@@ -2164,7 +3249,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "\"password\" is not supported yet and is refused with 422"
           }
         },
         "type": "object",
@@ -2260,6 +3346,63 @@
           },
           "geometry": {
             "$ref": "#/components/schemas/LineStringGeometry"
+          },
+          "access": {
+            "$ref": "#/components/schemas/OpeningAccess",
+            "default": "public"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DoorKind"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Door type; revolving doors are not step-free"
+          },
+          "widthM": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 30.0,
+                "minimum": 0.3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Widthm",
+            "description": "Clear width of a door when it differs from the drawing; < 0.8 m is not step-free"
+          },
+          "sillHeightM": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sillheightm",
+            "description": "Window only: sill above the floor (default 0.9)"
+          },
+          "heightM": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heightm",
+            "description": "Window only: height of the glazing (default 1.2)"
           }
         },
         "type": "object",
@@ -2270,12 +3413,24 @@
         ],
         "title": "Opening"
       },
+      "OpeningAccess": {
+        "type": "string",
+        "enum": [
+          "public",
+          "staff",
+          "emergency",
+          "locked"
+        ],
+        "title": "OpeningAccess",
+        "description": "Routes use only public openings; windows are never passable."
+      },
       "OpeningCategory": {
         "type": "string",
         "enum": [
           "door",
           "passage",
-          "entrance"
+          "entrance",
+          "window"
         ],
         "title": "OpeningCategory"
       },
@@ -2749,6 +3904,76 @@
         ],
         "title": "PathLine"
       },
+      "PlaceStatus": {
+        "type": "string",
+        "enum": [
+          "open",
+          "busy",
+          "closed"
+        ],
+        "title": "PlaceStatus"
+      },
+      "PlanImportOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "mapId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Mapid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ScanStatus"
+          },
+          "progress": {
+            "type": "integer",
+            "title": "Progress"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result",
+            "description": "Worker output: {pages: [{width, height, floor, imageUrl, sourcePage, rooms: [{ring, name, category, center}], openings: [{a, b, category, rooms}]}], connectors: [{kind, rooms: [{page, room}]}], metersPerPixel, ocr, warnings}. Coordinates are fractions of the page image (x right, y down)."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Createdat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "mapId",
+          "status",
+          "progress",
+          "error",
+          "result",
+          "createdAt"
+        ],
+        "title": "PlanImportOut"
+      },
       "Poi": {
         "properties": {
           "id": {
@@ -2797,6 +4022,80 @@
             "title": "Heightm",
             "description": "Height above floor, used for pano projection",
             "default": 1.2
+          },
+          "photos": {
+            "items": {
+              "type": "string",
+              "maxLength": 2048,
+              "pattern": "^(https://[^\\s/?#<>\\\"'`\\\\@:]+(:[0-9]{1,5})?([/?#][^\\s<>\\\"'`\\\\]*)?|/media/[A-Za-z0-9._~/-]+)$"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Photos"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/PoiLink"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Links"
+          },
+          "contacts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PoiContacts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hours": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours"
+          },
+          "tags": {
+            "items": {
+              "type": "string",
+              "maxLength": 40,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Tags"
+          },
+          "featured": {
+            "type": "boolean",
+            "title": "Featured",
+            "description": "Shown first to visitors",
+            "default": false
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/PoiEvent"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Events"
+          },
+          "translations": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Translation"
+            },
+            "type": "object",
+            "maxProperties": 5,
+            "title": "Translations",
+            "description": "Up to 5 languages, keyed by code (en, zh, ...)"
           }
         },
         "type": "object",
@@ -2808,6 +4107,150 @@
           "position"
         ],
         "title": "Poi"
+      },
+      "PoiContacts": {
+        "properties": {
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32,
+                "pattern": "^\\+?[0-9][0-9 ()-]{3,30}[0-9]$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 254,
+                "pattern": "^[^\\s@<>()\\[\\],;:\\\"]+@[^\\s@<>()\\[\\],;:\\\"]+\\.[^\\s@<>()\\[\\],;:\\\"]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "telegram": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^(@?[A-Za-z0-9_]{4,32}|https://t\\.me/[A-Za-z0-9_]{4,32})$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram",
+            "description": "User name without @ (https://t.me/<name>)"
+          },
+          "website": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^(https?://[^\\s/?#<>\\\"'`\\\\@:]+(:[0-9]{1,5})?([/?#][^\\s<>\\\"'`\\\\]*)?|/media/[A-Za-z0-9._~/-]+)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website"
+          }
+        },
+        "type": "object",
+        "title": "PoiContacts"
+      },
+      "PoiEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "start": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]{1,9})?)?([Zz]|[+-][0-9]{2}:?[0-9]{2})$",
+            "title": "Start",
+            "description": "ISO 8601 date-time with an offset, e.g. 2026-10-24T18:00:00+03:00"
+          },
+          "end": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]{1,9})?)?([Zz]|[+-][0-9]{2}:?[0-9]{2})$",
+            "title": "End",
+            "description": "ISO 8601 date-time with an offset, e.g. 2026-10-24T18:00:00+03:00"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "start",
+          "end"
+        ],
+        "title": "PoiEvent",
+        "description": "A talk, a show, a session at this place. Times carry their offset."
+      },
+      "PoiLink": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "pattern": "^(https?://[^\\s/?#<>\\\"'`\\\\@:]+(:[0-9]{1,5})?([/?#][^\\s<>\\\"'`\\\\]*)?|/media/[A-Za-z0-9._~/-]+)$",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "url"
+        ],
+        "title": "PoiLink"
       },
       "PolygonGeometry": {
         "properties": {
@@ -2943,6 +4386,87 @@
           "password"
         ],
         "title": "RegisterRequest"
+      },
+      "RoomScanOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "mapId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Mapid"
+          },
+          "levelId": {
+            "type": "string",
+            "title": "Levelid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ScanStatus"
+          },
+          "progress": {
+            "type": "integer",
+            "title": "Progress"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "cameraHeightM": {
+            "type": "number",
+            "title": "Cameraheightm"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result",
+            "description": "Worker output: {polygon: [[x, y], ...] (metres), heightM, areaM2, cameraPath, pointCount, quality}"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Createdat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "mapId",
+          "levelId",
+          "status",
+          "progress",
+          "error",
+          "cameraHeightM",
+          "result",
+          "createdAt"
+        ],
+        "title": "RoomScanOut"
+      },
+      "ScanStatus": {
+        "type": "string",
+        "enum": [
+          "uploading",
+          "processing",
+          "ready",
+          "failed"
+        ],
+        "title": "ScanStatus"
       },
       "StatCount": {
         "properties": {
@@ -3104,6 +4628,39 @@
         "title": "Tour",
         "description": "A route the organizer prepared: an excursion, a stand tour, the way from the entrance."
       },
+      "Translation": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "title": "Translation",
+        "description": "Name and description in another language; missing parts fall back to the original."
+      },
       "Underlay": {
         "properties": {
           "id": {
@@ -3187,6 +4744,106 @@
           },
           "geometry": {
             "$ref": "#/components/schemas/PolygonGeometry"
+          },
+          "access": {
+            "$ref": "#/components/schemas/UnitAccess",
+            "description": "staff / closed rooms are not walkable (like walkable: false)",
+            "default": "public"
+          },
+          "heightM": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 50.0,
+                "minimum": 1.5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heightm",
+            "description": "Ceiling height; level height if unset"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 7,
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color",
+            "description": "Fill on the plan"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "photos": {
+            "items": {
+              "type": "string",
+              "maxLength": 2048,
+              "pattern": "^(https://[^\\s/?#<>\\\"'`\\\\@:]+(:[0-9]{1,5})?([/?#][^\\s<>\\\"'`\\\\]*)?|/media/[A-Za-z0-9._~/-]+)$"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Photos"
+          },
+          "capacity": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000000.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity"
+          },
+          "amenities": {
+            "items": {
+              "$ref": "#/components/schemas/Amenity"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Amenities"
+          },
+          "hours": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours",
+            "description": "Opening hours as text, e.g. «Пн–Пт 9:00–18:00»"
+          },
+          "translations": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Translation"
+            },
+            "type": "object",
+            "maxProperties": 5,
+            "title": "Translations",
+            "description": "Up to 5 languages, keyed by code (en, zh, ...)"
           }
         },
         "type": "object",
@@ -3197,6 +4854,16 @@
           "geometry"
         ],
         "title": "Unit"
+      },
+      "UnitAccess": {
+        "type": "string",
+        "enum": [
+          "public",
+          "staff",
+          "closed"
+        ],
+        "title": "UnitAccess",
+        "description": "Who may enter. Routes go only through public rooms."
       },
       "UnitCategory": {
         "type": "string",
@@ -3312,6 +4979,51 @@
               }
             ],
             "title": "Address"
+          },
+          "branding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Branding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "announcements": {
+            "items": {
+              "$ref": "#/components/schemas/Announcement"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Announcements"
+          },
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/CustomCategory"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Categories"
+          },
+          "timezone": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^(UTC|[A-Za-z]+(/[A-Za-z0-9_+-]+){1,2})$",
+            "title": "Timezone",
+            "description": "IANA time zone of the venue: schedules and opening hours are shown in it",
+            "default": "Europe/Moscow"
+          },
+          "languages": {
+            "items": {
+              "type": "string",
+              "maxLength": 35,
+              "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,2}$"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Languages",
+            "description": "Languages offered to visitors, the one of the base texts first (ru if empty)"
           }
         },
         "type": "object",
@@ -3330,6 +5042,75 @@
           "failed"
         ],
         "title": "VersionStatus"
+      },
+      "Zone": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+            "title": "Id"
+          },
+          "levelId": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Levelid"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 7,
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "geometry": {
+            "$ref": "#/components/schemas/PolygonGeometry"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "translations": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Translation"
+            },
+            "type": "object",
+            "maxProperties": 5,
+            "title": "Translations",
+            "description": "Up to 5 languages, keyed by code (en, zh, ...)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "levelId",
+          "name",
+          "geometry"
+        ],
+        "title": "Zone",
+        "description": "A labelled area inside rooms (фудкорт, зона тишины). Does not affect routes."
       }
     }
   }

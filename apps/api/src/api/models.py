@@ -139,7 +139,7 @@ class Panorama(Base):
     heading_deg: Mapped[float] = mapped_column(Float, default=0.0)
     camera_height_m: Mapped[float] = mapped_column(Float, default=1.5)
     title: Mapped[str | None] = mapped_column(String(200), default=None)
-    source: Mapped[str] = mapped_column(String(16), default="capture")  # capture | upload
+    source: Mapped[str] = mapped_column(String(16), default="capture")  # capture|upload|video
     status: Mapped[PanoramaStatus] = mapped_column(String(16), default=PanoramaStatus.UPLOADING)
     progress: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, default=None)
@@ -175,3 +175,80 @@ class MapStat(Base):
     kind: Mapped[StatKind] = mapped_column(String(16))
     key: Mapped[str] = mapped_column(String(120), default="")
     count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ScanStatus(StrEnum):
+    UPLOADING = "uploading"
+    PROCESSING = "processing"
+    READY = "ready"
+    FAILED = "failed"
+
+
+class RoomScan(Base):
+    """A walk-around video of one room; the worker (worker.tasks.scan_room) turns it into a
+    floor outline the organizer places on the plan.
+
+    Files: scans/{id}/video.{webm|mp4|mov} and, if the phone sent it, scans/{id}/orientation.json.
+    `result` is the worker's output as is: {"polygon": [[x, y], ...], "heightM", "areaM2",
+    "cameraPath", "pointCount", "quality": {...}}.
+    """
+
+    __tablename__ = "room_scans"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    map_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("maps.id", ondelete="CASCADE"), index=True)
+    level_id: Mapped[str] = mapped_column(String(64))
+    status: Mapped[ScanStatus] = mapped_column(String(16), default=ScanStatus.UPLOADING)
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text, default=None)
+    camera_height_m: Mapped[float] = mapped_column(Float, default=1.5)
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+
+class PlaceStatus(StrEnum):
+    OPEN = "open"
+    BUSY = "busy"  # a queue, a full hall
+    CLOSED = "closed"
+
+
+class MapLive(Base):
+    """Live status of a place (POI), set by organizers without republishing the map."""
+
+    __tablename__ = "map_live"
+
+    map_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("maps.id", ondelete="CASCADE"), primary_key=True
+    )
+    poi_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    status: Mapped[PlaceStatus] = mapped_column(String(16))
+    note: Mapped[str | None] = mapped_column(String(140), default=None)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+
+class PlanImport(Base):
+    """A building plan (image or multi-page PDF) the worker turns into rooms, doors, stairs and
+    floors (worker.tasks.recognize_plan); the studio previews the draft and adds it to the plan.
+
+    The upload lives in plans/{id}/ (never served, deleted when done); page images for the
+    underlays go to maps/{map_id}/assets/. `result`: see worker.plan_import.recognize_file.
+    """
+
+    __tablename__ = "plan_imports"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    map_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("maps.id", ondelete="CASCADE"), index=True)
+    source_key: Mapped[str] = mapped_column(String(200))
+    status: Mapped[ScanStatus] = mapped_column(String(16), default=ScanStatus.PROCESSING)
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text, default=None)
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )

@@ -105,9 +105,15 @@ describe("routes on the demo venue", () => {
     const route = findRoute(graph, demo, { poiId: "p-stand-a1" }, { poiId: "p-registration" });
     if (!route) throw new Error("no route");
     const along = panosAlongRoute(demo, route);
-    expect(along.map((p) => p.pano.id)).toEqual(["pano-corridor-west", "pano-corridor-east"]);
+    // Out of hall A, east along the corridor, into the lobby.
+    expect(along.map((p) => p.pano.id)).toEqual([
+      "pano-hall-a",
+      "pano-corridor-west",
+      "pano-corridor-east",
+      "pano-lobby",
+    ]);
     // West pano faces north (heading 0); the route continues east along the corridor.
-    const west = along[0]?.pano;
+    const west = along.find((p) => p.pano.id === "pano-corridor-west")?.pano;
     if (!west) throw new Error("no pano");
     // The pano stands 2 m off the line: still look along the corridor, not across it.
     expect(yawAlongRoute(demo, route, west)).toBeCloseTo(90, 0);

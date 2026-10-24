@@ -2,8 +2,12 @@ import {
   applyPlanTheme,
   bundleBounds,
   DEFAULT_GLYPHS,
+  LANDSCAPE_LAYERS,
+  LANDSCAPE_SOURCE,
   LEVEL_FILTERED_LAYERS,
   type LonLat,
+  landscape,
+  landscapeLayers,
   levelFilter,
   type MapBundle,
   PLAN_FONT,
@@ -12,6 +16,8 @@ import {
   SOURCE,
   syncUnderlays,
   toCollections,
+  treeCrowns,
+  treeSolids,
   wallFeatures,
 } from "@ttkpr/map-core";
 import { useTheme } from "@ttkpr/ui";
@@ -31,6 +37,8 @@ interface Props {
   numbered?: boolean;
   /** Tilted view with walls (fill-extrusion), doors left open. */
   threeD?: boolean;
+  /** Lawn and trees around the buildings (decoration, can be switched off). */
+  nature?: boolean;
   /** Next tap picks a route end: panoramas are not hit-tested, the cursor is a crosshair. */
   picking?: boolean;
   /** Pan to a point (a route step); `n` changes on every request. */
@@ -76,6 +84,7 @@ export function PlanMap({
   hereId,
   numbered = false,
   threeD = false,
+  nature = true,
   picking,
   focus,
   topInset,
@@ -102,6 +111,8 @@ export function PlanMap({
       style: {
         version: 8,
         glyphs: DEFAULT_GLYPHS,
+        // Softer, higher sun than the default: walls and trees get a lit and a shaded side.
+        light: { anchor: "viewport", color: "#ffffff", intensity: 0.4, position: [1.3, 200, 40] },
         sources: {},
         layers: [
           { id: "background", type: "background", paint: { "background-color": "#eef1f5" } },
@@ -126,6 +137,20 @@ export function PlanMap({
       map.addSource(SOURCE.paths, { type: "geojson", data: collections.paths });
       for (const layer of planLayers(initialLevel.current)) map.addLayer(layer);
       syncUnderlays(map, bundle.underlays ?? [], initialLevel.current);
+
+      // Surroundings: the lawn and tree tops under the rooms, 3D trees next to the walls.
+      const land = landscape(bundle);
+      const { crowns, shadows } = treeCrowns(bundle, land.trees);
+      map.addSource(LANDSCAPE_SOURCE.lawn, { type: "geojson", data: land.lawn });
+      map.addSource(LANDSCAPE_SOURCE.shadows, { type: "geojson", data: shadows });
+      map.addSource(LANDSCAPE_SOURCE.crowns, { type: "geojson", data: crowns });
+      map.addSource(LANDSCAPE_SOURCE.solids, {
+        type: "geojson",
+        data: treeSolids(bundle, land.trees),
+      });
+      for (const layer of landscapeLayers(darkRef.current)) {
+        map.addLayer(layer, layer.type === "fill-extrusion" ? "connectors" : "units-fill");
+      }
 
       const filter = levelFilter("pois", initialLevel.current);
       map.addLayer({
@@ -353,6 +378,24 @@ export function PlanMap({
     if (map.getLayer("walls-3d")) apply();
     else map.once("load", apply);
   }, [threeD, levelId, bundle]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new bundle is a new map with the layers visible again
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      const show = (layer: string, on: boolean) => {
+        if (map.getLayer(layer))
+          map.setLayoutProperty(layer, "visibility", on ? "visible" : "none");
+      };
+      for (const layer of LANDSCAPE_LAYERS.flat) show(layer, nature);
+      // Tree tops are flat discs on the plan; in 3D the trees stand up instead (shadows stay).
+      show("landscape-crowns", nature && !threeD);
+      show("landscape-3d", nature && threeD);
+    };
+    if (map.getLayer("landscape-lawn")) apply();
+    else map.once("load", apply);
+  }, [nature, threeD, bundle]);
 
   // The overlays as the map's own padding: centring, easing and fitting all keep clear of them.
   // (Passing padding to easeTo would store it too, and fitBounds would then count it twice.)

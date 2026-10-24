@@ -1,4 +1,6 @@
 # Full stack: docker compose -f infra/docker-compose.yml --env-file infra/.env up --build
+# Sized for a 2-core / 4 GB server: every service has a memory limit, so one runaway process
+# (a huge stitch, a heavy query) is killed and restarted alone instead of taking the box down.
 name: ttkpr
 
 x-backend-env: &backend-env
@@ -9,6 +11,13 @@ x-backend-env: &backend-env
   # Signs invites and capture QR codes; the API refuses to start with a placeholder.
   SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in infra/.env (openssl rand -hex 32)}
   APP_ENV: production
+
+# Docker keeps container logs forever by default: rotate them so they never fill the disk.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
   web:
@@ -26,6 +35,17 @@ services:
       - "443:443/udp"
     volumes:
       - caddy-data:/data
+      # Caddy serves /media/panos and /media/maps straight from storage (see Caddyfile);
+      # read-only, and the Caddyfile never serves captures/ or scans/.
+      - storage:/srv/media:ro
+    mem_limit: 192m
+    logging: *logging
+    healthcheck:
+      # Caddy's admin endpoint (localhost only) answers while the server runs.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       api:
         condition: service_healthy
@@ -39,8 +59,12 @@ services:
       <<: *backend-env
       # Viewer and studio share one origin, so API calls are same-origin: no CORS needed.
       CORS_ORIGINS: "[]"
+      # uvicorn workers (one per core); rate limits are shared through Redis.
+      WEB_CONCURRENCY: 2
     volumes:
       - storage:/data/storage
+    mem_limit: 700m
+    logging: *logging
     healthcheck:
       test:
         [
@@ -72,6 +96,8 @@ services:
       - storage:/data/storage
       - ../fixtures:/app/fixtures:ro
       - ../apps/viewer/public/demo:/app/apps/viewer/public/demo:ro
+    mem_limit: 512m
+    logging: *logging
     depends_on:
       api:
         condition: service_healthy
@@ -81,10 +107,44 @@ services:
       context: ..
       dockerfile: apps/worker/Dockerfile
     environment: *backend-env
+    # One job at a time: a stitch or a room scan uses most of the memory it is given.
+    command:
+      [
+        "celery",
+        "-A",
+        "worker.celery_app",
+        "worker",
+        "-Q",
+        "default,heavy",
+        "--concurrency",
+        "1",
+        "--loglevel",
+        "info",
+      ]
     volumes:
       - storage:/data/storage
+    mem_limit: 2500m
+    # Leaves half a core to Caddy, the API and Postgres: maps keep opening fast while a
+    # panorama is being stitched.
+    cpus: 1.5
+    logging: *logging
+    healthcheck:
+      # Celery runs as PID 1 (its exit restarts the container); this checks it reaches the
+      # broker, without loading the heavy task modules next to a running job.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, redis; redis.Redis.from_url(os.environ['REDIS_URL'], socket_timeout=3).ping()",
+        ]
+      interval: 60s
+      timeout: 10s
+      retries: 3
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     restart: unless-stopped
 
@@ -94,8 +154,38 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-ttk}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ttk}
       POSTGRES_DB: ${POSTGRES_DB:-ttk}
+    # Tuned for a 700 MB container on an SSD VPS: the data of a few venues fits in memory.
+    # 2 API workers x (5 + 10 overflow) + the worker's pool stay well under max_connections.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=160MB
+      - -c
+      - effective_cache_size=448MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=60
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - max_wal_size=512MB
+      - -c
+      - max_parallel_workers_per_gather=1
+      # Short OLTP queries: JIT compilation only costs time and memory here.
+      - -c
+      - jit=off
+      - -c
+      - log_min_duration_statement=1000
+    shm_size: 128m
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    mem_limit: 700m
+    logging: *logging
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
       interval: 5s
@@ -105,9 +195,22 @@ services:
 
   redis:
     image: redis:8-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    # Task queues have no TTL and are never evicted; when memory runs out, rate-limit counters
+    # and task results (they all expire anyway) go first.
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--maxmemory",
+        "128mb",
+        "--maxmemory-policy",
+        "volatile-lru",
+      ]
     volumes:
       - redis-data:/data
+    mem_limit: 192m
+    logging: *logging
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

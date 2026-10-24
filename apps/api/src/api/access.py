@@ -6,8 +6,13 @@ from sqlalchemy import select
 from api import capture_tokens
 from api.config import get_settings
 from api.deps import DbSession, get_current_user
-from api.models import Map, MapMember, MemberRole, User
+from api.models import AccessMode, Map, MapMember, MemberRole, User
 from api.permissions import Permission, allowed
+
+
+def members_only(mode: str) -> bool:
+    """Private maps, and "password" ones until passwords exist: fail closed, never public."""
+    return mode in (AccessMode.PRIVATE, AccessMode.PASSWORD)
 
 
 async def member_access(db: DbSession, map_id: uuid.UUID, user: User) -> tuple[Map, MemberRole]:

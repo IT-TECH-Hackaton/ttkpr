@@ -1,9 +1,18 @@
+import asyncio
+import gzip
 import io
 import json
+import shutil
+import uuid
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 import pyvips
 from httpx import AsyncClient
+from sqlalchemy import update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from api.models import AccessMode, Map
 
 Register = Callable[[str], Awaitable[None]]
 
@@ -33,6 +42,75 @@ async def test_publish_serves_manifest_and_bundle(client: AsyncClient, register:
     bundle = await client.get(manifest.json()["bundleUrl"])
     assert "immutable" in bundle.headers["cache-control"]
     assert bundle.json()["venue"]["name"] == "Отель"
+
+
+async def test_public_bundle_is_a_static_file(
+    client: AsyncClient, register: Register, tmp_path: Path
+) -> None:
+    await register("owner@example.com")
+    created = await _new_map(client)
+    await client.post(f"/api/maps/{created['id']}/publish")
+    manifest = (await client.get(f"/api/public/maps/{created['slug']}/manifest.json")).json()
+    # Keyed by map id: a slug re-used by another map can never hit this cached copy.
+    assert manifest["bundleUrl"] == f"/media/maps/{created['id']}/v/1/bundle.json"
+    static = await client.get(manifest["bundleUrl"])
+    assert static.status_code == 200
+    assert static.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert static.json()["venue"]["name"] == "Отель"
+    stored = tmp_path / "storage" / "maps" / created["id"] / "v" / "1"
+    assert gzip.decompress((stored / "bundle.json.gz").read_bytes()) == static.content
+    # Old manifests (offline copies) keep working through the API route.
+    old = await client.get(f"/api/public/maps/{created['slug']}/v/1/bundle.json")
+    assert old.json() == static.json()
+
+    # Published before static bundles existed: the first manifest request writes the file.
+    shutil.rmtree(stored)
+    again = (await client.get(f"/api/public/maps/{created['slug']}/manifest.json")).json()
+    assert again["bundleUrl"] == manifest["bundleUrl"] and (stored / "bundle.json").is_file()
+
+
+async def test_manifest_etag_and_304(client: AsyncClient, register: Register) -> None:
+    await register("owner@example.com")
+    created = await _new_map(client)
+    await client.post(f"/api/maps/{created['id']}/publish")
+    url = f"/api/public/maps/{created['slug']}/manifest.json"
+    first = await client.get(url)
+    etag = first.headers["etag"]
+    assert etag.startswith('"') and first.headers["cache-control"] == "no-cache"
+    for header in (etag, f"W/{etag}", etag[:-1] + '-gzip"', f'"other", {etag}'):
+        cached = await client.get(url, headers={"If-None-Match": header})
+        assert cached.status_code == 304, header
+        assert cached.content == b"" and cached.headers["etag"] == etag
+    await client.post(f"/api/maps/{created['id']}/publish")
+    fresh = await client.get(url, headers={"If-None-Match": etag})
+    assert fresh.status_code == 200 and fresh.json()["version"] == 2
+    assert fresh.headers["etag"] != etag
+
+
+async def test_members_only_maps_get_no_static_bundle(
+    client: AsyncClient, register: Register, tmp_path: Path
+) -> None:
+    await register("owner@example.com")
+    created = await _new_map(client)
+    versions = tmp_path / "storage" / "maps" / created["id"] / "v"
+    url = f"/api/public/maps/{created['slug']}/manifest.json"
+    await client.post(f"/api/maps/{created['id']}/publish")
+    assert (versions / "1" / "bundle.json").is_file()
+
+    # Going private removes every published file right away.
+    await client.patch(f"/api/maps/{created['id']}", json={"accessMode": "private"})
+    assert not versions.exists()
+    await client.post(f"/api/maps/{created['id']}/publish")
+    assert not versions.exists()
+    private = await client.get(url)
+    assert private.json()["bundleUrl"] == f"/api/public/maps/{created['slug']}/v/2/bundle.json"
+    assert private.headers["cache-control"] == "private, no-cache"
+    assert (await client.get(private.json()["bundleUrl"])).status_code == 200  # the owner
+
+    # Back to "by link": the current version is static again.
+    await client.patch(f"/api/maps/{created['id']}", json={"accessMode": "link"})
+    assert (versions / "2" / "bundle.json").is_file()
+    assert (await client.get(url)).json()["bundleUrl"].startswith("/media/maps/")
 
 
 async def test_pretty_slug_keeps_link_after_republish(
@@ -66,6 +144,34 @@ async def test_private_map_hidden_from_visitors(client: AsyncClient, register: R
     await client.post("/api/auth/logout")
     assert (
         await client.get(f"/api/public/maps/{created['slug']}/manifest.json")
+    ).status_code == 403
+
+
+async def test_password_mode_is_refused_and_never_served_as_public(
+    client: AsyncClient, register: Register, db_sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    await register("owner@example.com")
+    created = await _new_map(client)
+    refused = await client.patch(f"/api/maps/{created['id']}", json={"accessMode": "password"})
+    assert refused.status_code == 422
+    assert "по паролю" in refused.json()["detail"]
+    assert (await client.get(f"/api/maps/{created['id']}")).json()["accessMode"] == "link"
+
+    # A map stored as "password" earlier: members only until passwords exist.
+    await client.post(f"/api/maps/{created['id']}/publish")
+    async with db_sessionmaker() as db:
+        await db.execute(
+            update(Map)
+            .where(Map.id == uuid.UUID(created["id"]))
+            .values(access_mode=AccessMode.PASSWORD)
+        )
+        await db.commit()
+    manifest = f"/api/public/maps/{created['slug']}/manifest.json"
+    assert (await client.get(manifest)).status_code == 200  # the owner
+    await client.post("/api/auth/logout")
+    assert (await client.get(manifest)).status_code == 403
+    assert (
+        await client.get(f"/api/public/maps/{created['slug']}/v/1/bundle.json")
     ).status_code == 403
 
 
@@ -111,6 +217,32 @@ async def test_phone_capture_with_token(
         f"/api/panoramas/{pano['id']}", headers={"X-Capture-Token": other_map_token}
     )
     assert forged.status_code == 401
+
+
+async def test_parallel_frame_uploads_keep_every_frame(
+    client: AsyncClient, register: Register
+) -> None:
+    """The phone uploads frames in parallel; none may be lost to a read-modify-write race."""
+    await register("owner@example.com")
+    created = await _new_map(client)
+    pano = (
+        await client.post(
+            f"/api/maps/{created['id']}/panoramas",
+            json={"levelId": "l1", "position": [37.6, 55.7], "frameCount": 8},
+        )
+    ).json()
+    meta = json.dumps({"quaternion": [1, 0, 0, 0], "width": 64, "height": 48})
+
+    async def upload(index: int) -> int:
+        response = await client.put(
+            f"/api/panoramas/{pano['id']}/frames/{index}",
+            files={"file": ("f.jpg", io.BytesIO(_jpeg()), "image/jpeg")},
+            data={"meta": meta},
+        )
+        return response.status_code
+
+    assert await asyncio.gather(*(upload(i) for i in range(8))) == [200] * 8
+    assert (await client.get(f"/api/panoramas/{pano['id']}")).json()["progress"] == 100
 
 
 async def test_frame_upload_rejects_non_jpeg(client: AsyncClient, register: Register) -> None:

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.accounts import readable_password
 from api.config import REPO_ROOT
@@ -48,11 +49,12 @@ ACCOUNTS = [
 
 
 def _copy_tiles(source: Path, pano_id: uuid.UUID) -> dict[str, Any]:
-    """Demo grid tiles -> storage, the same layout the worker writes."""
+    """Demo scene tiles -> storage, the same layout the worker writes."""
     storage = get_storage()
     key = f"panos/{pano_id}/tiles"
     target = storage.path(key)
-    shutil.copytree(source, target, dirs_exist_ok=True)
+    shutil.rmtree(target, ignore_errors=True)
+    shutil.copytree(source, target)
     levels = sorted(
         (int(p.name) for p in target.iterdir() if p.is_dir() and p.name.isdigit()),
     )
@@ -65,8 +67,43 @@ def _copy_tiles(source: Path, pano_id: uuid.UUID) -> dict[str, Any]:
     ).model_dump(mode="json", by_alias=True)
 
 
+async def _sync_demo_panos(
+    db: AsyncSession, demo: Map, fixture_panos: list[dict[str, Any]], demo_dir: Path
+) -> None:
+    """One panorama per fixture pano, tagged with its fixture id; tiles from {demo_dir}/{id}/."""
+    existing = list(await db.scalars(select(Panorama).where(Panorama.map_id == demo.id)))
+    tagged = {p.capture_meta["demoId"]: p for p in existing if p.capture_meta.get("demoId")}
+    for item in fixture_panos:
+        lon, lat = item["position"]
+        pano = tagged.get(item["id"]) or next(
+            # Seeded before panoramas were tagged: exactly where the fixture puts them.
+            (
+                p
+                for p in existing
+                if p.source == "upload"
+                and not p.capture_meta
+                and abs(p.lon - lon) < 1e-9
+                and abs(p.lat - lat) < 1e-9
+            ),
+            None,
+        )
+        if pano is None:
+            pano = Panorama(map_id=demo.id, source="upload")
+            db.add(pano)
+        pano.level_id = item["levelId"]
+        pano.lon, pano.lat = lon, lat
+        pano.heading_deg = item.get("headingDeg", 0.0)
+        pano.camera_height_m = item.get("cameraHeightM", 1.5)
+        pano.status = PanoramaStatus.READY
+        pano.progress = 100
+        pano.capture_meta = {"demoId": item["id"]}
+        await db.flush()
+        source = demo_dir / Path(item["tiles"]["baseUrl"]).name
+        pano.tiles = _copy_tiles(source, pano.id)
+
+
 async def seed(
-    document: dict[str, Any], tiles: Path, keep_passwords: bool = False
+    document: dict[str, Any], demo_dir: Path, keep_passwords: bool = False
 ) -> list[tuple[str, str, str, str]]:
     rows: list[tuple[str, str, str, str]] = []
     async with get_sessionmaker()() as db:
@@ -86,7 +123,7 @@ async def seed(
         await db.flush()
 
         # The demo map follows the fixture: created once, then re-published on every run with the
-        # current plan (tours, walkways...) and the panoramas it already has.
+        # current plan (tours, walkways...), the fixture's panoramas and any added in the studio.
         fixture_panos = document.pop("panos", [])
         document["venue"] = {**document["venue"], "id": DEMO_SLUG, "name": DEMO_TITLE}
         draft = MapDocument.model_validate(document).model_dump(mode="json", by_alias=True)
@@ -95,24 +132,10 @@ async def seed(
             demo = Map(slug=DEMO_SLUG, title=DEMO_TITLE, draft=draft, access_mode=AccessMode.LINK)
             db.add(demo)
             await db.flush()
-            for item in fixture_panos:
-                pano = Panorama(
-                    map_id=demo.id,
-                    level_id=item["levelId"],
-                    lon=item["position"][0],
-                    lat=item["position"][1],
-                    heading_deg=item.get("headingDeg", 0.0),
-                    camera_height_m=item.get("cameraHeightM", 1.5),
-                    source="upload",
-                    status=PanoramaStatus.READY,
-                    progress=100,
-                )
-                db.add(pano)
-                await db.flush()
-                pano.tiles = _copy_tiles(tiles, pano.id)
         else:
             demo.draft = draft
             demo.draft_version += 1
+        await _sync_demo_panos(db, demo, fixture_panos, demo_dir)
 
         ready = await db.scalars(
             select(Panorama).where(
@@ -162,13 +185,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fixture", type=Path, default=REPO_ROOT / "fixtures" / "demo-map.json")
     demo_dir = REPO_ROOT / "apps" / "viewer" / "public" / "demo"
-    parser.add_argument("--tiles", type=Path, default=demo_dir / "pano-grid")
+    parser.add_argument(
+        "--demo-dir", type=Path, default=demo_dir, help="tiles of the fixture's panoramas"
+    )
     parser.add_argument(
         "--keep-passwords", action="store_true", help="existing accounts keep their passwords"
     )
     args = parser.parse_args()
     document = json.loads(args.fixture.read_text(encoding="utf-8"))
-    rows = asyncio.run(seed(document, args.tiles, args.keep_passwords))
+    rows = asyncio.run(seed(document, args.demo_dir, args.keep_passwords))
     print(f"# Тестовые аккаунты\n\nКарта: «{DEMO_TITLE}», адрес /m/{DEMO_SLUG}\n")
     print("| Email | Пароль | Роль | Имя |\n| --- | --- | --- | --- |")
     for email, password, role, name in rows:

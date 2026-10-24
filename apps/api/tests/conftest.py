@@ -12,7 +12,8 @@ from api.config import get_settings
 from api.db import Base, get_db
 from api.main import app
 
-ORIGIN = "https://localhost"
+# Same origin as the test server: the viewer, the studio and the API share one origin.
+ORIGIN = "https://testserver"
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
 
@@ -54,6 +55,7 @@ async def client(
     ) as http:
         yield http
     app.dependency_overrides.clear()
+    await ratelimit.aclose()
 
 
 Register = Callable[[str], Awaitable[None]]

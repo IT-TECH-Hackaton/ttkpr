@@ -24,8 +24,12 @@ async def _start_session(
 ) -> None:
     token, token_hash = new_session_token()
     ttl = timedelta(days=settings.session_ttl_days)
-    db.add(Session(user_id=user.id, token_hash=token_hash, expires_at=datetime.now(UTC) + ttl))
+    now = datetime.now(UTC)
+    # Expired sessions are useless; dropping them here keeps the table from growing forever.
+    await db.execute(delete(Session).where(Session.user_id == user.id, Session.expires_at <= now))
+    db.add(Session(user_id=user.id, token_hash=token_hash, expires_at=now + ttl))
     await db.commit()
+    # No Domain: host-only, as the __Host- prefix requires (see Settings.session_cookie).
     response.set_cookie(
         settings.session_cookie,
         token,
@@ -37,6 +41,18 @@ async def _start_session(
     )
 
 
+def _end_session_cookie(response: Response, settings: AppSettings) -> None:
+    # Same attributes as when it was set: browsers ignore a __Host- cookie without Secure,
+    # so a bare delete would leave the session cookie in place.
+    response.delete_cookie(
+        settings.session_cookie,
+        path="/",
+        secure=settings.cookie_secure,
+        httponly=True,
+        samesite="lax",
+    )
+
+
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def register(
     body: RegisterRequest,
@@ -45,7 +61,7 @@ async def register(
     db: DbSession,
     settings: AppSettings,
 ) -> User:
-    ratelimit.limit(request, "register", max_hits=60, window_s=3600)
+    await ratelimit.limit(request, "register", max_hits=60, window_s=3600)
     email = body.email.lower()
     if await db.scalar(select(User.id).where(User.email == email)):
         raise HTTPException(status.HTTP_409_CONFLICT, "Пользователь с таким email уже есть")
@@ -66,8 +82,8 @@ async def login(
     settings: AppSettings,
 ) -> User:
     email = body.email.lower()
-    ratelimit.limit(request, "login", max_hits=10, window_s=300, subject=email)
-    ratelimit.limit(request, "login-ip", max_hits=200, window_s=300)
+    await ratelimit.limit(request, "login", max_hits=10, window_s=300, subject=email)
+    await ratelimit.limit(request, "login-ip", max_hits=200, window_s=300)
     user = await db.scalar(select(User).where(User.email == email))
     # Unknown emails cost the same argon2 time, so timing does not reveal who is registered.
     known = user.password_hash if user else dummy_hash()
@@ -85,7 +101,7 @@ async def logout(
     if token:
         await db.execute(delete(Session).where(Session.token_hash == hash_token(token)))
         await db.commit()
-    response.delete_cookie(settings.session_cookie, path="/")
+    _end_session_cookie(response, settings)
 
 
 @router.get("/me", response_model=UserOut)
@@ -109,7 +125,7 @@ async def change_password(
     settings: AppSettings,
 ) -> None:
     """Also signs out every other device: a changed password must lock out a stolen session."""
-    ratelimit.limit(request, "password", max_hits=10, window_s=300)
+    await ratelimit.limit(request, "password", max_hits=10, window_s=300)
     if not await run_in_threadpool(verify_password, user.password_hash, body.current_password):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Текущий пароль указан неверно")
     user.password_hash = await run_in_threadpool(hash_password, body.new_password)
@@ -126,4 +142,4 @@ async def logout_everywhere(
 ) -> None:
     await db.execute(delete(Session).where(Session.user_id == user.id))
     await db.commit()
-    response.delete_cookie(settings.session_cookie, path="/")
+    _end_session_cookie(response, settings)

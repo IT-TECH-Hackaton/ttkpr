@@ -6,16 +6,18 @@ from fastapi import APIRouter, HTTPException, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func, select, update
 
-from api import capture_tokens
-from api.access import member_access, member_map
+from api import bundles, capture_tokens
+from api.access import member_access, member_map, members_only
 from api.deps import CurrentUser, DbSession
 from api.models import (
+    AccessMode,
     Map,
     MapMember,
     MapVersion,
     MemberRole,
     Panorama,
     PanoramaStatus,
+    RoomScan,
     VersionStatus,
 )
 from api.permissions import Permission, permissions_of
@@ -99,14 +101,32 @@ async def update_map(
     sharing = (body.slug is not None and body.slug != "") or body.access_mode is not None
     found = await member_map(db, map_id, user, Permission.SHARE if sharing else Permission.EDIT)
     _, role = await member_access(db, map_id, user)
+    if body.access_mode == AccessMode.PASSWORD:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Доступ по паролю пока не поддерживается — выберите «По ссылке», «Публичная»"
+            " или «Только участники»",
+        )
+    mode_changes = body.access_mode is not None and body.access_mode != found.access_mode
+    if mode_changes:
+        # Same lock as publishing and the manifest's lazy write of static bundles.
+        await db.refresh(found, with_for_update=True)
     if body.slug and body.slug != found.slug:
         if body.slug in RESERVED or await db.scalar(select(Map.id).where(Map.slug == body.slug)):
             raise HTTPException(status.HTTP_409_CONFLICT, "Такой адрес уже занят")
         found.slug = body.slug
     if body.title:
         found.title = body.title
-    if body.access_mode:
+    if body.access_mode and mode_changes:
         found.access_mode = body.access_mode
+        if members_only(body.access_mode):
+            # Before commit, under the lock: nobody re-reads the old mode and writes it back.
+            # Copies a CDN already cached expire only with the CDN (see ARCHITECTURE.md).
+            await run_in_threadpool(bundles.remove_static, map_id)
+        elif found.published_version_id:
+            version = await db.get(MapVersion, found.published_version_id)
+            if version and version.bundle is not None:
+                await bundles.write_static(map_id, version.number, version.bundle)
     await db.commit()
     return await _summary(db, found, role)
 
@@ -115,6 +135,7 @@ async def update_map(
 async def delete_map(map_id: uuid.UUID, db: DbSession, user: CurrentUser) -> None:
     found = await member_map(db, map_id, user, Permission.DELETE)
     pano_ids = list(await db.scalars(select(Panorama.id).where(Panorama.map_id == map_id)))
+    scan_ids = list(await db.scalars(select(RoomScan.id).where(RoomScan.map_id == map_id)))
     await db.delete(found)
     await db.commit()
     storage = get_storage()
@@ -122,6 +143,7 @@ async def delete_map(map_id: uuid.UUID, db: DbSession, user: CurrentUser) -> Non
         f"maps/{map_id}",
         *(f"panos/{p}" for p in pano_ids),
         *(f"captures/{p}" for p in pano_ids),
+        *(f"scans/{s}" for s in scan_ids),
     ]:
         shutil.rmtree(storage.path(prefix), ignore_errors=True)
 
@@ -171,7 +193,8 @@ def _bundle_pano(pano: Panorama) -> Pano:
 async def publish(map_id: uuid.UUID, db: DbSession, user: CurrentUser) -> PublishOut:
     """Freezes draft + ready panoramas into a new immutable version; the link stays the same."""
     found = await member_map(db, map_id, user, Permission.PUBLISH)
-    await db.execute(select(Map.id).where(Map.id == map_id).with_for_update())
+    # One publish at a time per map; also re-reads the draft and the access mode under the lock.
+    await db.refresh(found, with_for_update=True)
     panoramas = await db.scalars(
         select(Panorama).where(Panorama.map_id == map_id, Panorama.status == PanoramaStatus.READY)
     )
@@ -185,6 +208,9 @@ async def publish(map_id: uuid.UUID, db: DbSession, user: CurrentUser) -> Publis
     )
     db.add(version)
     await db.flush()
+    if not members_only(found.access_mode):
+        # Visitors then read a static file (Caddy, CDN); written before the pointer moves.
+        await bundles.write_static(map_id, version.number, bundle)
     found.published_version_id = version.id
     await db.commit()
     return PublishOut(

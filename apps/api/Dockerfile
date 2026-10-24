@@ -15,4 +15,9 @@ WORKDIR /app/apps/api
 RUN useradd --system --uid 10001 app && mkdir -p /data/storage && chown app /data/storage
 USER app
 EXPOSE 8000
-CMD ["sh", "-c", "alembic upgrade head && uvicorn api.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"]
+# Migrations once, then uvicorn replaces the shell (docker stop reaches it) with one worker per
+# core of the 2-core server; rate limits live in Redis, so the workers count together.
+# Keep-alive longer than Caddy's idle upstream timeout (2 min): Caddy closes idle connections
+# first, so it never sends a request on one uvicorn is closing (a spurious 502).
+ENV WEB_CONCURRENCY=2
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY} --timeout-keep-alive 130 --proxy-headers --forwarded-allow-ips='*'"]

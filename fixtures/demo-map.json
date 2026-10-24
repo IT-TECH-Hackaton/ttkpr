@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "venue": {
     "id": "demo",
     "name": "Демо-площадка хакатона",
@@ -958,8 +958,8 @@
       "cameraHeightM": 1.5,
       "status": "ready",
       "tiles": {
-        "baseUrl": "/demo/pano-grid",
-        "previewUrl": "/demo/pano-grid/preview.webp",
+        "baseUrl": "/demo/pano-corridor-west",
+        "previewUrl": "/demo/pano-corridor-west/preview.webp",
         "tileSize": 512,
         "levels": [
           {
@@ -991,8 +991,239 @@
       "cameraHeightM": 1.5,
       "status": "ready",
       "tiles": {
-        "baseUrl": "/demo/pano-grid",
-        "previewUrl": "/demo/pano-grid/preview.webp",
+        "baseUrl": "/demo/pano-corridor-east",
+        "previewUrl": "/demo/pano-corridor-east/preview.webp",
+        "tileSize": 512,
+        "levels": [
+          {
+            "width": 1024,
+            "cols": 2,
+            "rows": 1
+          },
+          {
+            "width": 2048,
+            "cols": 4,
+            "rows": 2
+          },
+          {
+            "width": 4096,
+            "cols": 8,
+            "rows": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "pano-hall-a",
+      "levelId": "l1",
+      "position": [
+        37.62015963,
+        55.75404042
+      ],
+      "headingDeg": 0.0,
+      "cameraHeightM": 1.5,
+      "status": "ready",
+      "tiles": {
+        "baseUrl": "/demo/pano-hall-a",
+        "previewUrl": "/demo/pano-hall-a/preview.webp",
+        "tileSize": 512,
+        "levels": [
+          {
+            "width": 1024,
+            "cols": 2,
+            "rows": 1
+          },
+          {
+            "width": 2048,
+            "cols": 4,
+            "rows": 2
+          },
+          {
+            "width": 4096,
+            "cols": 8,
+            "rows": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "pano-lobby",
+      "levelId": "l1",
+      "position": [
+        37.62055871,
+        55.75404492
+      ],
+      "headingDeg": 270.0,
+      "cameraHeightM": 1.5,
+      "status": "ready",
+      "tiles": {
+        "baseUrl": "/demo/pano-lobby",
+        "previewUrl": "/demo/pano-lobby/preview.webp",
+        "tileSize": 512,
+        "levels": [
+          {
+            "width": 1024,
+            "cols": 2,
+            "rows": 1
+          },
+          {
+            "width": 2048,
+            "cols": 4,
+            "rows": 2
+          },
+          {
+            "width": 4096,
+            "cols": 8,
+            "rows": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "pano-hall-b",
+      "levelId": "l1",
+      "position": [
+        37.62015963,
+        55.75414373
+      ],
+      "headingDeg": 0.0,
+      "cameraHeightM": 1.5,
+      "status": "ready",
+      "tiles": {
+        "baseUrl": "/demo/pano-hall-b",
+        "previewUrl": "/demo/pano-hall-b/preview.webp",
+        "tileSize": 512,
+        "levels": [
+          {
+            "width": 1024,
+            "cols": 2,
+            "rows": 1
+          },
+          {
+            "width": 2048,
+            "cols": 4,
+            "rows": 2
+          },
+          {
+            "width": 4096,
+            "cols": 8,
+            "rows": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "pano-cafe",
+      "levelId": "l1",
+      "position": [
+        37.62038311,
+        55.75415271
+      ],
+      "headingDeg": 90.0,
+      "cameraHeightM": 1.5,
+      "status": "ready",
+      "tiles": {
+        "baseUrl": "/demo/pano-cafe",
+        "previewUrl": "/demo/pano-cafe/preview.webp",
+        "tileSize": 512,
+        "levels": [
+          {
+            "width": 1024,
+            "cols": 2,
+            "rows": 1
+          },
+          {
+            "width": 2048,
+            "cols": 4,
+            "rows": 2
+          },
+          {
+            "width": 4096,
+            "cols": 8,
+            "rows": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "pano-tent",
+      "levelId": "l1",
+      "position": [
+        37.62055871,
+        55.75382932
+      ],
+      "headingDeg": 0.0,
+      "cameraHeightM": 1.5,
+      "status": "ready",
+      "tiles": {
+        "baseUrl": "/demo/pano-tent",
+        "previewUrl": "/demo/pano-tent/preview.webp",
+        "tileSize": 512,
+        "levels": [
+          {
+            "width": 1024,
+            "cols": 2,
+            "rows": 1
+          },
+          {
+            "width": 2048,
+            "cols": 4,
+            "rows": 2
+          },
+          {
+            "width": 4096,
+            "cols": 8,
+            "rows": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "pano-conf",
+      "levelId": "l2",
+      "position": [
+        37.62013569,
+        55.75404492
+      ],
+      "headingDeg": 0.0,
+      "cameraHeightM": 1.5,
+      "status": "ready",
+      "tiles": {
+        "baseUrl": "/demo/pano-conf",
+        "previewUrl": "/demo/pano-conf/preview.webp",
+        "tileSize": 512,
+        "levels": [
+          {
+            "width": 1024,
+            "cols": 2,
+            "rows": 1
+          },
+          {
+            "width": 2048,
+            "cols": 4,
+            "rows": 2
+          },
+          {
+            "width": 4096,
+            "cols": 8,
+            "rows": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "pano-lab",
+      "levelId": "l2",
+      "position": [
+        37.6201277,
+        55.75415271
+      ],
+      "headingDeg": 90.0,
+      "cameraHeightM": 1.5,
+      "status": "ready",
+      "tiles": {
+        "baseUrl": "/demo/pano-lab",
+        "previewUrl": "/demo/pano-lab/preview.webp",
         "tileSize": 512,
         "levels": [
           {

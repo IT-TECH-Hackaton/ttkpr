@@ -33,5 +33,8 @@ if ($SiteHost) { $env:SITE_HOST = $SiteHost }
 if ($Bind) { $env:SSH_BIND = $Bind; Write-Host "SSH через $Bind (в обход VPN)" }
 
 $root = git rev-parse --show-toplevel
+# docker prints its progress to stderr; with "Stop", redirected output (*> log) would turn the
+# first such line into a terminating error. Success is the script's exit code.
+$ErrorActionPreference = "Continue"
 & $bash -lc "cd '$root' && bash infra/deploy/deploy.sh"
 exit $LASTEXITCODE

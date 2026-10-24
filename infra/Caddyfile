@@ -7,6 +7,10 @@
 	default_sni {$SITE_HOST:localhost}
 }
 
+# Content-Security-Policy snippets csp_viewer / csp_studio with the hashes of this build's
+# inline scripts: written by infra/web/csp.mjs in infra/web.Dockerfile.
+import /etc/caddy/csp.caddy
+
 (security) {
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
@@ -22,40 +26,77 @@
 	encode zstd gzip
 
 	handle /api/* {
-		# Plan images and panoramas are at most 25 MB; refuse anything far bigger up front.
-		request_body {
+		# Plan images and panoramas are at most 25 MB: refuse anything far bigger up front.
+		# Videos (a panorama from a video, a room scan) are up to 300 MB and stream through.
+		@video path /api/maps/*/panoramas/video /api/maps/*/scans
+		@other not path /api/maps/*/panoramas/video /api/maps/*/scans
+		request_body @video {
+			max_size 320MB
+		}
+		request_body @other {
 			max_size 30MB
 		}
+		# JSON only: nothing here is a page to render or frame.
+		header Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
 		reverse_proxy api:8000
 	}
-	# Tiles, previews and plan images (immutable, unguessable keys).
+
+	# Pano tiles and previews, plan images and published map bundles, straight from the
+	# storage volume (mounted read-only): immutable files under unguessable keys, so they are
+	# cached forever. Raw frames, videos and room scans (captures/, scans/) are never served.
 	handle /media/* {
-		reverse_proxy api:8000
+		# Keys are plain names (letters, digits, . _ -), no segment starts with a dot. Path
+		# matchers see the cleaned, decoded path, so the raw request is checked as well:
+		# `..`, percent-encoding and backslashes never belong in a media URL.
+		@published {
+			path_regexp ^/media/(panos|maps)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$
+			not vars_regexp {http.request.orig_uri} (?i)(\.\.|%|\\)
+		}
+		handle @published {
+			root * /srv
+			header Cache-Control "public, max-age=31536000, immutable"
+			header Content-Security-Policy "default-src 'none'; sandbox"
+			file_server {
+				# bundle.json.gz is written next to every published bundle.
+				precompressed br gzip
+			}
+		}
+		handle {
+			respond 404
+		}
 	}
 
 	redir /studio /studio/ permanent
 	handle_path /studio/* {
-		# The studio is never framed; the visitor map is embeddable (iframe on the venue's site).
-		header Content-Security-Policy "frame-ancestors 'none'"
+		# Never framed, and its window is its own (COOP): see infra/web/csp.mjs.
+		import csp_studio
+		header X-Frame-Options "DENY"
 		root * /srv/studio
 		@immutable path /assets/*
 		header @immutable Cache-Control "public, max-age=31536000, immutable"
-		@shell path / /index.html
-		header @shell Cache-Control "no-cache"
+		# Everything else, deep links included (they get index.html), is revalidated.
+		@mutable not path /assets/*
+		header @mutable Cache-Control "no-cache"
 		try_files {path} /index.html
-		file_server
+		file_server {
+			precompressed br gzip
+		}
 	}
 
 	handle {
+		# The visitor map is embeddable (an iframe on the venue's site): frame-ancestors *.
+		import csp_viewer
 		root * /srv/viewer
 		# Versioned bundles, pano tiles and hashed assets never change.
 		@immutable path_regexp ^/(assets/|demo/v[0-9]+/|demo/pano-[^/]+/)
 		header @immutable Cache-Control "public, max-age=31536000, immutable"
-		# The manifest is the only mutable file of a published map; the shell and the service
-		# worker must be revalidated so updates reach visitors.
-		@fresh path */manifest.json /index.html /sw.js
-		header @fresh Cache-Control "no-cache"
+		# The shell (also for deep links like /m/{slug}), the service worker and manifests are
+		# revalidated, so an update reaches visitors with the next open.
+		@mutable not path_regexp ^/(assets/|demo/v[0-9]+/|demo/pano-[^/]+/)
+		header @mutable Cache-Control "no-cache"
 		try_files {path} /index.html
-		file_server
+		file_server {
+			precompressed br gzip
+		}
 	}
 }

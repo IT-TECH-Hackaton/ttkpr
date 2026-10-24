@@ -17,8 +17,12 @@ app.conf.update(
     task_soft_time_limit=900,
     task_time_limit=1000,
     worker_max_memory_per_child=3_000_000,  # KiB
+    # Video tasks set longer limits of their own (worker.tasks).
     task_routes={
         "worker.tasks.stitch_panorama": {"queue": "heavy"},
         "worker.tasks.tile_panorama": {"queue": "heavy"},
+        "worker.tasks.stitch_video": {"queue": "heavy"},
+        "worker.tasks.scan_room": {"queue": "heavy"},
+        "worker.tasks.recognize_plan": {"queue": "heavy"},
     },
 )

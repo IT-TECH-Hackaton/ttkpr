@@ -7,8 +7,16 @@ import { type NavEdge, type NavGraph, type NavNode, poiNodeId, toLonLat, withPoi
 export type Endpoint = { poiId: string } | { levelId: string; position: LonLat };
 
 export interface RouteOptions {
-  /** Wheelchairs, strollers, luggage: no stairs, no escalators. */
+  /** Wheelchairs, strollers, luggage: no stairs, no escalators, no revolving or narrow doors. */
   avoidStairs?: boolean;
+}
+
+/** Can this edge be used with these options? */
+export function edgeAllowed(edge: NavEdge, options: RouteOptions): boolean {
+  return !(
+    options.avoidStairs &&
+    (edge.kind === "stairs" || edge.kind === "escalator" || edge.barrier !== undefined)
+  );
 }
 
 export interface RouteLeg {
@@ -108,8 +116,10 @@ function shortestPath(graph: NavGraph, from: string, to: string, options: RouteO
     const [cost, id] = heap.pop() as [number, string];
     if (id === to) break;
     if (cost > (best.get(id) ?? Number.POSITIVE_INFINITY)) continue;
+    // A place on a stand or a stage is somewhere to go, not a way through the stand.
+    if (id !== from && graph.nodes.get(id)?.enclosed) continue;
     for (const edge of graph.edges.get(id) ?? []) {
-      if (options.avoidStairs && (edge.kind === "stairs" || edge.kind === "escalator")) continue;
+      if (!edgeAllowed(edge, options)) continue;
       const next = cost + edge.cost;
       if (next < (best.get(edge.to) ?? Number.POSITIVE_INFINITY)) {
         best.set(edge.to, next);
@@ -373,31 +383,40 @@ export function unreachablePois(graph: NavGraph, bundle: MapBundle): string[] {
   const inGraph = pois.filter((p) => graph.nodes.has(poiNodeId(p.id)));
   const missing = pois.filter((p) => !graph.nodes.has(poiNodeId(p.id))).map((p) => p.id);
   if (inGraph.length < 2) return missing;
-  // Largest connected component wins; everything else is cut off.
+  // Largest connected component wins; everything else is cut off. Places inside obstacles are
+  // dead ends: they belong to the components around them but do not join them.
+  const transit = (id: string) => !graph.nodes.get(id)?.enclosed;
   const component = new Map<string, number>();
   let index = 0;
-  const sizes: number[] = [];
   for (const start of graph.nodes.keys()) {
-    if (component.has(start)) continue;
+    if (component.has(start) || !transit(start)) continue;
     const stack = [start];
     component.set(start, index);
-    let size = 0;
     while (stack.length) {
       const id = stack.pop() as string;
-      size++;
       for (const e of graph.edges.get(id) ?? []) {
-        if (!component.has(e.to)) {
+        if (!component.has(e.to) && transit(e.to)) {
           component.set(e.to, index);
           stack.push(e.to);
         }
       }
     }
-    sizes.push(size);
     index++;
   }
-  const poiComponents = inGraph.map((p) => component.get(poiNodeId(p.id)) ?? -1);
+  const componentsOf = (id: string): number[] => {
+    const own = component.get(id);
+    if (own !== undefined) return [own];
+    const around = (graph.edges.get(id) ?? []).map((e) => component.get(e.to));
+    return [...new Set(around.filter((c): c is number => c !== undefined))];
+  };
+  const poiComponents = inGraph.map((p) => componentsOf(poiNodeId(p.id)));
   const counts = new Map<number, number>();
-  for (const c of poiComponents) counts.set(c, (counts.get(c) ?? 0) + 1);
+  for (const list of poiComponents) for (const c of list) counts.set(c, (counts.get(c) ?? 0) + 1);
   const main = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-  return [...missing, ...inGraph.filter((_, i) => poiComponents[i] !== main).map((p) => p.id)];
+  return [
+    ...missing,
+    ...inGraph
+      .filter((_, i) => main === undefined || !poiComponents[i]?.includes(main))
+      .map((p) => p.id),
+  ];
 }

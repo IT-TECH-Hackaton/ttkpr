@@ -28,7 +28,9 @@ echo "==> server setup (idempotent)"
 "${SSH[@]}" "bash -s" < infra/deploy/server-setup.sh
 
 echo "==> uploading the working tree (tracked and new files, nothing ignored)"
+# Files deleted but not yet committed are still listed by git: skip them.
 git ls-files -z --cached --others --exclude-standard \
+  | while IFS= read -r -d '' f; do [ -e "$f" ] && printf '%s\0' "$f"; done \
   | tar --null -T - -czf - \
   | "${SSH[@]}" "mkdir -p $DIR && tar -xzf - -C $DIR"
 

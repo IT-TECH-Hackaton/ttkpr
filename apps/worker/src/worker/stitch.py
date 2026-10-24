@@ -7,6 +7,12 @@
    close to its sensor value, so frames of white walls without features simply stay there.
 4. Gain compensation, feathered blending, hole filling (zenith/nadir).
 
+Without sensors (a video from a browser that gave no motion events) the starting rotations come
+from chaining frame-to-frame visual rotations, which drift. Then ("visual" priors) pairs are
+matched without the sensor gate, the focal length is estimated from the pair homographies, the
+pairwise rotations are averaged globally (closes the loop of a full turn), the adjustment uses
+loose priors and the horizon is levelled from the camera axes (wave correction).
+
 Conventions (CLAUDE.md): OpenCV camera axes (x right, y down, z forward); world x east,
 y north, z up. Equirect: yaw 0 in the image centre (= first frame's direction), yaw grows to
 the right (clockwise seen from above), pitch +90 at the top row.
@@ -15,6 +21,7 @@ the right (clockwise seen from above), pitch +90 at the top row.
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Literal
 
 import cv2
 import numpy as np
@@ -25,9 +32,12 @@ from scipy.spatial.transform import Rotation
 MATCH_SIDE = 1000  # long side of images used for feature matching
 MIN_INLIERS = 15
 SENSOR_SIGMA_DEG = 3.0
+VISUAL_SIGMA_DEG = 8.0  # priors from averaged visual rotations: right shape, a few degrees off
+VISUAL_PAIR_MARGIN_DEG = 45.0  # chained visual rotations drift; look for overlaps further away
 PIXEL_SIGMA = 1.5
 
 Progress = Callable[[float], None]
+Priors = Literal["sensors", "visual"]
 
 
 @dataclass
@@ -84,6 +94,19 @@ def default_focal(width: int, height: int, fov_deg: float | None) -> float:
     return 0.75 * max(width, height)
 
 
+def kabsch(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Rotation R minimising sum |R a_i - b_i|^2 for rays a, b of shape (n, 3)."""
+    u, _, vt = np.linalg.svd(a.T @ b)
+    d = 1.0 if np.linalg.det(vt.T @ u.T) >= 0 else -1.0
+    return np.asarray(vt.T @ np.diag([1.0, 1.0, d]) @ u.T)
+
+
+def nearest_rotation(m: np.ndarray) -> np.ndarray:
+    u, _, vt = np.linalg.svd(m)
+    d = 1.0 if np.linalg.det(u @ vt) >= 0 else -1.0
+    return np.asarray(u @ np.diag([1.0, 1.0, d]) @ vt)
+
+
 # --- matching -------------------------------------------------------------------------------
 
 
@@ -95,15 +118,23 @@ class _Matches:
     uj: np.ndarray
 
 
-def _overlapping_pairs(rotations: list[np.ndarray], max_angle: float) -> list[tuple[int, int]]:
-    forwards = [r[:, 2] for r in rotations]
-    pairs = []
-    for a in range(len(rotations)):
-        for b in range(a + 1, len(rotations)):
-            angle = math.acos(float(np.clip(forwards[a] @ forwards[b], -1, 1)))
-            if angle < max_angle:
-                pairs.append((a, b))
-    return pairs
+def _overlapping_pairs(
+    rotations: list[np.ndarray], max_angle: float, max_neighbors: int | None = None
+) -> list[tuple[int, int]]:
+    """Pairs whose view directions are closer than max_angle; optionally only each frame's
+    nearest max_neighbors (a video gives many keyframes and matching every overlap is slow)."""
+    n = len(rotations)
+    forwards = np.stack([r[:, 2] for r in rotations])
+    angles = np.arccos(np.clip(forwards @ forwards.T, -1, 1))
+    close = angles < max_angle
+    np.fill_diagonal(close, False)
+    if max_neighbors is not None:
+        keep = np.zeros_like(close)
+        for a in range(n):
+            cand = np.flatnonzero(close[a])
+            keep[a, cand[np.argsort(angles[a, cand])[:max_neighbors]]] = True
+        close = keep | keep.T
+    return [(a, b) for a in range(n) for b in range(a + 1, n) if close[a, b]]
 
 
 def _project(
@@ -119,13 +150,17 @@ def _match(
     rotations: list[np.ndarray],
     f: float,
     pairs: list[tuple[int, int]],
+    gate: bool = True,
+    homographies: dict[tuple[int, int], np.ndarray] | None = None,
 ) -> tuple[_Matches, dict[tuple[int, int], int]]:
+    """gate: drop matches far from where the rotations predict them (trusted sensors only).
+    homographies: filled with each matched pair's RANSAC homography (a -> b), if given."""
     sift = cv2.SIFT_create(nfeatures=1500)  # type: ignore[attr-defined]
     feats = [sift.detectAndCompute(g, None) for g in grays]
     matcher = cv2.BFMatcher(cv2.NORM_L2)
     h, w = grays[0].shape
     cx, cy = (w - 1) / 2, (h - 1) / 2
-    gate = max(40.0, 0.15 * max(w, h))  # how far from the sensor prediction a match may be
+    gate_px = max(40.0, 0.15 * max(w, h))  # how far from the sensor prediction a match may be
 
     all_i, all_j, all_ui, all_uj = [], [], [], []
     inliers_per_pair: dict[tuple[int, int], int] = {}
@@ -140,18 +175,21 @@ def _match(
         pa = np.array([ka[m.queryIdx].pt for m in good], dtype=np.float32)
         pb = np.array([kb[m.trainIdx].pt for m in good], dtype=np.float32)
 
-        rays = np.column_stack([(pa[:, 0] - cx) / f, (pa[:, 1] - cy) / f, np.ones(len(pa))])
-        predicted = _project(rotations[b].T, rays @ rotations[a].T, f, cx, cy)
-        near = np.linalg.norm(predicted - pb, axis=1) < gate
-        pa, pb = pa[near], pb[near]
+        if gate:
+            rays = np.column_stack([(pa[:, 0] - cx) / f, (pa[:, 1] - cy) / f, np.ones(len(pa))])
+            predicted = _project(rotations[b].T, rays @ rotations[a].T, f, cx, cy)
+            near = np.linalg.norm(predicted - pb, axis=1) < gate_px
+            pa, pb = pa[near], pb[near]
         if len(pa) < MIN_INLIERS:
             continue
-        _, mask = cv2.findHomography(pa, pb, cv2.RANSAC, 3.0)
+        hom, mask = cv2.findHomography(pa, pb, cv2.RANSAC, 3.0)
         if mask is None:
             continue
         keep = mask.ravel().astype(bool)
         if keep.sum() < MIN_INLIERS:
             continue
+        if homographies is not None and hom is not None:
+            homographies[(a, b)] = hom
         pa, pb = pa[keep], pb[keep]
         # Cap per pair so one textured pair does not dominate the adjustment.
         if len(pa) > 150:
@@ -182,7 +220,11 @@ def _match(
 
 
 def _adjust(
-    rotations: list[np.ndarray], f0: float, matches: _Matches, size: tuple[int, int]
+    rotations: list[np.ndarray],
+    f0: float,
+    matches: _Matches,
+    size: tuple[int, int],
+    prior_sigma_deg: float = SENSOR_SIGMA_DEG,
 ) -> tuple[list[np.ndarray], float, float]:
     """Returns refined rotations, focal length and RMS reprojection error in pixels."""
     n = len(rotations)
@@ -191,7 +233,7 @@ def _adjust(
     w, h = size
     cx, cy = (w - 1) / 2, (h - 1) / 2
     r0 = np.stack(rotations)
-    sensor_sigma = math.radians(SENSOR_SIGMA_DEG)
+    sensor_sigma = math.radians(prior_sigma_deg)
 
     def rays(u: np.ndarray, f: float) -> np.ndarray:
         v = np.column_stack([(u[:, 0] - cx) / f, (u[:, 1] - cy) / f, np.ones(len(u))])
@@ -235,6 +277,202 @@ def _adjust(
     match_part = residuals(solution.x)[: 3 * m].reshape(m, 3) * PIXEL_SIGMA
     rms = float(np.sqrt(np.mean(np.sum(match_part**2, axis=1))))
     return list(rs), f, rms
+
+
+# --- without sensors ------------------------------------------------------------------------
+
+
+def focal_from_homography(
+    hom: np.ndarray, cx: float, cy: float, f_lo: float, f_hi: float
+) -> tuple[float, float] | None:
+    """Focal length that makes a pixel homography a pure rotation, and that rotation's angle.
+
+    For a camera turning about its centre H ~ K R K^-1, so for the right f the matrix K^-1 H K
+    scaled to unit determinant is orthogonal. None when the minimum sits on the search border.
+    """
+    c = np.array([[1.0, 0.0, -cx], [0.0, 1.0, -cy], [0.0, 0.0, 1.0]])
+    hc = c @ hom @ np.linalg.inv(c)
+    fs = np.geomspace(f_lo, f_hi, 241)
+    m = np.broadcast_to(hc, (len(fs), 3, 3)).copy()
+    m[:, :2, 2] /= fs[:, None]
+    m[:, 2, :2] *= fs[:, None]
+    det = np.linalg.det(m)
+    ok = det > 1e-12
+    if not ok.any():
+        return None
+    m[ok] /= np.cbrt(det[ok])[:, None, None]
+    err = np.full(len(fs), np.inf)
+    err[ok] = np.linalg.norm(m[ok] @ np.transpose(m[ok], (0, 2, 1)) - np.eye(3), axis=(1, 2))
+    k = int(np.argmin(err))
+    if k == 0 or k == len(fs) - 1 or not math.isfinite(float(err[k])):
+        return None
+    e0, e1, e2 = (float(v) for v in err[k - 1 : k + 2])
+    denom = e0 - 2 * e1 + e2
+    shift = 0.5 * (e0 - e2) / denom if math.isfinite(denom) and denom > 1e-12 else 0.0
+    log_step = math.log(fs[1] / fs[0])
+    focal = float(fs[k] * math.exp(float(np.clip(shift, -1, 1)) * log_step))
+    angle = math.degrees(math.acos(float(np.clip((np.trace(m[k]) - 1) / 2, -1, 1))))
+    return focal, angle
+
+
+def _estimate_focal(
+    homographies: dict[tuple[int, int], np.ndarray], w: int, h: int, f0: float
+) -> float | None:
+    """Weighted median of per-pair focal estimates; pairs turned by 8-60° are well conditioned."""
+    cx, cy = (w - 1) / 2, (h - 1) / 2
+    estimates, weights = [], []
+    for hom in homographies.values():
+        found = focal_from_homography(hom, cx, cy, 0.35 * f0, 3.0 * f0)
+        if found is not None and 8 <= found[1] <= 60:
+            estimates.append(found[0])
+            weights.append(found[1])
+    if len(estimates) < 4:
+        return None
+    order = np.argsort(estimates)
+    cum = np.cumsum(np.asarray(weights)[order])
+    return float(np.asarray(estimates)[order][np.searchsorted(cum, cum[-1] / 2)])
+
+
+def estimate_focal(
+    images: list[np.ndarray], pairs: list[tuple[int, int]], f0: float
+) -> float | None:
+    """Focal length (pixels of `images`) from the homographies of the given overlapping pairs;
+    None when too few pairs turn enough to tell."""
+    if not images or not pairs:
+        return None
+    h, w = images[0].shape[:2]
+    scale = min(1.0, MATCH_SIDE / max(w, h))
+    grays = [
+        cv2.cvtColor(
+            cv2.resize(im, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA),
+            cv2.COLOR_BGR2GRAY,
+        )
+        for im in images
+    ]
+    homographies: dict[tuple[int, int], np.ndarray] = {}
+    identity = [np.eye(3)] * len(images)
+    _match(grays, identity, f0 * scale, pairs, gate=False, homographies=homographies)
+    gh, gw = grays[0].shape
+    found = _estimate_focal(homographies, gw, gh, f0 * scale)
+    return found / scale if found else None
+
+
+def _pair_rotations(
+    matches: _Matches, per_pair: dict[tuple[int, int], int], f: float, w: int, h: int
+) -> dict[tuple[int, int], tuple[np.ndarray, float]]:
+    """R_ab (rays of b -> rays of a, = R_a^T R_b) and a weight for every plausible pair.
+
+    Without the sensor gate a few pairs match by accident (repeated texture): their "rotation"
+    turns further than the frames could overlap, or the matches do not fit a pure rotation."""
+    cx, cy = (w - 1) / 2, (h - 1) / 2
+    max_angle = 2 * math.atan(max(w, h) / 2 / f)
+
+    def rays(u: np.ndarray) -> np.ndarray:
+        v = np.column_stack([(u[:, 0] - cx) / f, (u[:, 1] - cy) / f, np.ones(len(u))])
+        return np.asarray(v / np.linalg.norm(v, axis=1, keepdims=True))
+
+    out: dict[tuple[int, int], tuple[np.ndarray, float]] = {}
+    start = 0
+    for pair, count in per_pair.items():  # same order as the match blocks
+        block = slice(start, start + count)
+        start += count
+        ra, rb = rays(matches.ui[block]), rays(matches.uj[block])
+        r_ab = kabsch(rb, ra)
+        fit_px = float(np.sqrt(np.mean(np.sum((rb @ r_ab.T - ra) ** 2, axis=1)))) * f
+        angle = float(np.linalg.norm(Rotation.from_matrix(r_ab).as_rotvec()))
+        if fit_px < 4.0 and angle < max_angle:
+            out[pair] = (r_ab, float(count))
+    return out
+
+
+def _pair_residuals_deg(
+    rotations: list[np.ndarray], relative: dict[tuple[int, int], tuple[np.ndarray, float]]
+) -> dict[tuple[int, int], float]:
+    return {
+        (a, b): math.degrees(
+            float(
+                np.linalg.norm(
+                    Rotation.from_matrix(r.T @ rotations[a].T @ rotations[b]).as_rotvec()
+                )
+            )
+        )
+        for (a, b), (r, _) in relative.items()
+    }
+
+
+def _keep_pairs(
+    matches: _Matches, per_pair: dict[tuple[int, int], int], keep: set[tuple[int, int]]
+) -> tuple[_Matches, dict[tuple[int, int], int]]:
+    mask = np.zeros(len(matches.i), bool)
+    kept: dict[tuple[int, int], int] = {}
+    start = 0
+    for pair, count in per_pair.items():
+        if pair in keep:
+            mask[start : start + count] = True
+            kept[pair] = count
+        start += count
+    return _Matches(matches.i[mask], matches.j[mask], matches.ui[mask], matches.uj[mask]), kept
+
+
+def average_rotations(
+    init: list[np.ndarray],
+    relative: dict[tuple[int, int], tuple[np.ndarray, float]],
+    iterations: int = 4,
+) -> list[np.ndarray]:
+    """Global rotations from pairwise ones (R_b = R_a · R_ab), frame 0 fixed at init[0].
+
+    Linear chordal averaging spreads the loop error of a chained estimate evenly instead of
+    leaving it at the end of the turn; reweighting by residual suppresses a wrong pair. Frames
+    without pairs keep their initial rotation relative to frame 0 through a weak prior.
+    """
+    n = len(init)
+    if n < 2 or not relative:
+        return init
+    pairs = list(relative)
+    base = np.array([math.sqrt(relative[p][1]) for p in pairs])
+    weights = base.copy()
+    m = len(pairs)
+    y0 = init[0].T
+    out = init
+    for _ in range(iterations):
+        # Unknowns Y_i = R_i^T (i >= 1); each pair: Y_b - R_ab^T Y_a = 0.
+        a_mat = np.zeros((3 * (m + n - 1), 3 * (n - 1)))
+        rhs = np.zeros((3 * (m + n - 1), 3))
+        for k, (a, b) in enumerate(pairs):
+            rows = slice(3 * k, 3 * k + 3)
+            r_t = relative[(a, b)][0].T
+            a_mat[rows, 3 * (b - 1) : 3 * b] += weights[k] * np.eye(3)
+            if a > 0:
+                a_mat[rows, 3 * (a - 1) : 3 * a] -= weights[k] * r_t
+            else:
+                rhs[rows] += weights[k] * r_t @ y0
+        for i in range(1, n):
+            rows = slice(3 * (m + i - 1), 3 * (m + i))
+            a_mat[rows, 3 * (i - 1) : 3 * i] = 1e-3 * np.eye(3)
+            rhs[rows] = 1e-3 * init[i].T
+        y = np.linalg.lstsq(a_mat, rhs, rcond=None)[0]
+        out = [init[0]] + [nearest_rotation(y[3 * (i - 1) : 3 * i]).T for i in range(1, n)]
+        residual = _pair_residuals_deg(out, relative)
+        weights = base / np.maximum(1.0, np.array([residual[p] for p in pairs]) / 2.0)
+    return out
+
+
+def level_horizon(rotations: list[np.ndarray]) -> list[np.ndarray]:
+    """Wave correction: a phone held upright keeps its x axis horizontal while panning, so world
+    up is the direction most perpendicular to all camera x axes."""
+    xs = np.stack([r[:, 0] for r in rotations])
+    values, vectors = np.linalg.eigh(xs.T @ xs)  # ascending
+    if values[1] < 0.05 * values[2]:  # x axes do not span a plane: nothing to level by
+        return rotations
+    up = vectors[:, 0]
+    if up @ np.stack([r[:, 1] for r in rotations]).sum(axis=0) > 0:  # y is down
+        up = -up
+    axis = np.cross(up, [0.0, 0.0, 1.0])
+    s = float(np.linalg.norm(axis))
+    if s < 1e-9:
+        return rotations
+    fix = Rotation.from_rotvec(axis / s * math.atan2(s, float(up[2]))).as_matrix()
+    return [fix @ r for r in rotations]
 
 
 # --- rendering ----------------------------------------------------------------------------
@@ -384,20 +622,27 @@ def stitch(
     fov_deg: float | None = None,
     out_width: int = 4096,
     progress: Progress | None = None,
+    *,
+    focal_px: float | None = None,
+    priors: Priors = "sensors",
+    max_neighbors: int | None = None,
 ) -> StitchResult:
+    """frames[].quaternion: sensor rotations (priors="sensors") or chained visual estimates with
+    the first frame level (priors="visual"). focal_px overrides the focal guessed from fov_deg."""
     if len(frames) < 2:
         raise ValueError("Нужно хотя бы два кадра")
     sizes = {f.image.shape[:2] for f in frames}
     if len(sizes) != 1:
         raise ValueError("Кадры разного размера")
     h, w = frames[0].image.shape[:2]
-    report: dict[str, float | int | str] = {"frames": len(frames)}
+    visual = priors == "visual"
+    report: dict[str, float | int | str] = {"frames": len(frames), "priors": priors}
 
     sensor = [quat_to_matrix(f.quaternion) for f in frames]
     # Re-reference yaw so the first frame looks at the image centre; gravity is kept.
     align = _rz(_yaw(sensor[0][:, 2]))
     sensor = [align @ r for r in sensor]
-    f0 = default_focal(w, h, fov_deg)
+    f0 = focal_px or default_focal(w, h, fov_deg)
 
     scale = min(1.0, MATCH_SIDE / max(w, h))
     grays = [
@@ -408,13 +653,38 @@ def stitch(
         for f in frames
     ]
     long_fov = 2 * math.atan(max(w, h) / 2 / f0)
-    pairs = _overlapping_pairs(sensor, max_angle=0.95 * long_fov)
-    matches, per_pair = _match(grays, sensor, f0 * scale, pairs)
+    margin = math.radians(VISUAL_PAIR_MARGIN_DEG) if visual else 0.0
+    pairs = _overlapping_pairs(
+        sensor, max_angle=min(math.pi, 0.95 * long_fov + margin), max_neighbors=max_neighbors
+    )
+    homographies: dict[tuple[int, int], np.ndarray] | None = {} if visual else None
+    matches, per_pair = _match(
+        grays, sensor, f0 * scale, pairs, gate=not visual, homographies=homographies
+    )
     if progress:
         progress(0.25)
 
     gh, gw = grays[0].shape
-    rotations, f_small, rms = _adjust(sensor, f0 * scale, matches, (gw, gh))
+    f_match = f0 * scale
+    if visual and homographies is not None:
+        estimated = _estimate_focal(homographies, gw, gh, f_match)
+        if estimated is not None:
+            f_match = estimated
+        relative = _pair_rotations(matches, per_pair, f_match, gw, gh)
+        sensor = average_rotations(sensor, relative)
+        # Pairs that still disagree with the global solution are accidental matches.
+        residual = _pair_residuals_deg(sensor, relative)
+        limit = max(2.0, 4 * float(np.median(list(residual.values())))) if residual else 0.0
+        matches, per_pair = _keep_pairs(
+            matches, per_pair, {p for p, r in residual.items() if r < limit}
+        )
+    rotations, f_small, rms = _adjust(
+        sensor, f_match, matches, (gw, gh), VISUAL_SIGMA_DEG if visual else SENSOR_SIGMA_DEG
+    )
+    if visual:
+        rotations = level_horizon(rotations)
+        realign = _rz(_yaw(rotations[0][:, 2]))
+        rotations = [realign @ r for r in rotations]
     focal = f_small / scale
     connected = {k for pair in per_pair for k in pair}
     report.update(

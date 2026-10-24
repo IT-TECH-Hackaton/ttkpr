@@ -27,6 +27,7 @@ import { cornersPlacement, placementCorners, viewCenter } from "../lib/mapView";
 import { usePanoramaActions } from "../lib/panos";
 import { useDraft } from "../store";
 import { CaptureQrDialog } from "./CaptureQrDialog";
+import { PlanImportDialog } from "./PlanImportDialog";
 import { RouteCheck } from "./RouteCheck";
 
 const PanoPlacer = lazy(() => import("./PanoPlacer"));
@@ -128,13 +129,14 @@ export function Inspector({
     content = (
       <Section title="Дверь / проход">
         <p className="text-sm text-muted">
-          {opening.category === "entrance" ? "Вход в здание" : "Соединяет соседние помещения"} — по
-          ней пройдут маршруты.
+          {opening.category === "window"
+            ? "Окно: видно на плане и в 3D, маршруты через него не идут."
+            : `${opening.category === "entrance" ? "Вход в здание" : "Соединяет соседние помещения"} — по ней пройдут маршруты.`}
         </p>
         <DeleteButton id={opening.id} />
       </Section>
     );
-  } else content = <OverviewPanel panos={panos} />;
+  } else content = <OverviewPanel panos={panos} mapId={mapId} />;
 
   // Roles without the edit right see the same panels, read-only (panoramas manage themselves).
   return (
@@ -542,7 +544,8 @@ function PanoSpotPanel({ mapId, spot }: { mapId: string; spot: [number, number] 
   );
 }
 
-function OverviewPanel({ panos }: { panos: PanoramaOut[] }) {
+function OverviewPanel({ panos, mapId }: { panos: PanoramaOut[]; mapId: string }) {
+  const [importing, setImporting] = useState(false);
   const doc = useDraft((s) => s.doc);
   const levelId = useDraft((s) => s.levelId);
   const { select } = useDraft.getState();
@@ -587,10 +590,15 @@ function OverviewPanel({ panos }: { panos: PanoramaOut[] }) {
       )}
 
       <Section title="Быстрый старт">
+        <Button className="w-full" onClick={() => setImporting(true)}>
+          <Wand2 className="size-4" aria-hidden />
+          Распознать план из файла
+        </Button>
+        {importing && <PlanImportDialog mapId={mapId} onClose={() => setImporting(false)} />}
         <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted">
           <li>
-            Загрузите схему здания (кнопка с картинкой) и нажмите «Распознать комнаты» — или рисуйте
-            с нуля.
+            «Распознать план из файла»: PDF или картинка — помещения, двери, лестницы и этажи
+            появятся сами. Или загрузите схему подложкой и рисуйте поверх.
           </li>
           <li>«Комната»: два клика по углам — следующая прилипнет к соседней.</li>
           <li>«Дверь»: наведите на стену и кликните.</li>

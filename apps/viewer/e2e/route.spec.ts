@@ -18,9 +18,12 @@ test("routes from a QR sign and walks the route through panoramas", async ({ pag
   await expect(steps).toContainText("Вы на месте: «Регистрация»");
 
   await page.getByRole("button", { name: "Пройти по панорамам" }).click();
-  await expect(page.getByText("1 из 2")).toBeVisible();
-  await page.getByRole("button", { name: "Дальше", exact: true }).click();
-  await expect(page.getByText("2 из 2")).toBeVisible();
+  // Hall A, both corridor panoramas, the lobby.
+  await expect(page.getByText("1 из 4")).toBeVisible();
+  for (const n of [2, 3, 4]) {
+    await page.getByRole("button", { name: "Дальше", exact: true }).click();
+    await expect(page.getByText(`${n} из 4`)).toBeVisible();
+  }
   await page.getByRole("button", { name: "Готово" }).click();
   await expect(steps).toBeVisible();
 });

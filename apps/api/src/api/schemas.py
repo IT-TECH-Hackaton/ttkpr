@@ -1,11 +1,21 @@
 import uuid
 from datetime import date, datetime
+from typing import Any
 
-from pydantic import ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, FiniteFloat
 
-from api.models import AccessMode, MemberRole, PanoramaStatus, VersionStatus
+from api.models import (
+    AccessMode,
+    MemberRole,
+    PanoramaStatus,
+    PlaceStatus,
+    ScanStatus,
+    VersionStatus,
+)
 from api.slugs import SLUG_PATTERN
 from map_schema.models import CamelModel, LonLat, MapDocument, PanoTiles
+
+MAX_ORIENTATION_SAMPLES = 20_000
 
 
 class RegisterRequest(CamelModel):
@@ -53,7 +63,9 @@ class MapUpdate(CamelModel):
         pattern=SLUG_PATTERN,
         description="Short link /m/{slug}: 3-32 latin letters, digits and dashes",
     )
-    access_mode: AccessMode | None = None
+    access_mode: AccessMode | None = Field(
+        None, description='"password" is not supported yet and is refused with 422'
+    )
 
 
 class DraftOut(CamelModel):
@@ -197,3 +209,96 @@ class StatsOut(CamelModel):
     searches: list[StatCount]
     misses: list[StatCount] = Field(description="Searches that found nothing")
     private: bool
+
+
+class OrientationSample(BaseModel):
+    t: FiniteFloat = Field(description="Seconds from the start of the video")
+    q: tuple[FiniteFloat, FiniteFloat, FiniteFloat, FiniteFloat] = Field(
+        description="Camera -> world rotation [w, x, y, z]; OpenCV camera axes, world z up"
+    )
+
+
+class OrientationTrack(CamelModel):
+    """orientation.json next to an uploaded video (written as validated here, read by the worker).
+
+    {"samples": [{"t": 0.0, "q": [w, x, y, z]}, ...], "fovDeg": 65.0 | null}
+    """
+
+    samples: list[OrientationSample] = Field(max_length=MAX_ORIENTATION_SAMPLES)
+    fov_deg: float | None = Field(None, gt=10, lt=170, description="FOV across the short side")
+
+
+class VideoPanoramaForm(CamelModel):
+    """Text fields of POST /api/maps/{map_id}/panoramas/video (multipart)."""
+
+    level_id: str = Field(min_length=1, max_length=64)
+    lon: float = Field(ge=-180, le=180)
+    lat: float = Field(ge=-90, le=90)
+    heading_deg: FiniteFloat | None = Field(
+        None, description="Compass heading at the start of the video"
+    )
+
+
+class RoomScanForm(CamelModel):
+    """Text fields of POST /api/maps/{map_id}/scans (multipart)."""
+
+    level_id: str = Field(min_length=1, max_length=64)
+    camera_height_m: float = Field(
+        1.5, ge=0.3, le=3.0, description="Height of the phone above the floor while walking"
+    )
+
+
+class RoomScanOut(CamelModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    map_id: uuid.UUID
+    level_id: str
+    status: ScanStatus
+    progress: int
+    error: str | None
+    camera_height_m: float
+    result: dict[str, Any] | None = Field(
+        description="Worker output: {polygon: [[x, y], ...] (metres), heightM, areaM2,"
+        " cameraPath, pointCount, quality}"
+    )
+    created_at: datetime
+
+
+class LiveUpdate(CamelModel):
+    status: PlaceStatus
+    note: str | None = Field(
+        None, max_length=140, description="Short note for visitors, e.g. «очередь ~10 минут»"
+    )
+
+
+class LivePlace(CamelModel):
+    status: PlaceStatus
+    note: str | None
+    updated_at: datetime
+
+
+class LivePlaceOut(LivePlace):
+    poi_id: str
+
+
+class LiveOut(CamelModel):
+    updated_at: datetime | None = Field(description="Latest change; null when nothing is set")
+    places: dict[str, LivePlace] = Field(description="Status by POI id")
+
+
+class PlanImportOut(CamelModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    map_id: uuid.UUID
+    status: ScanStatus
+    progress: int
+    error: str | None
+    result: dict[str, Any] | None = Field(
+        description="Worker output: {pages: [{width, height, floor, imageUrl, sourcePage,"
+        " rooms: [{ring, name, category, center}], openings: [{a, b, category, rooms}]}],"
+        " connectors: [{kind, rooms: [{page, room}]}], metersPerPixel, ocr, warnings}."
+        " Coordinates are fractions of the page image (x right, y down)."
+    )
+    created_at: datetime

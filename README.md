@@ -93,6 +93,43 @@ type $env:USERPROFILE\.ssh\ttkpr_deploy.pub | ssh -b 10.11.12.101 root@217.144.1
 docker compose -f infra/docker-compose.yml --env-file infra/.env exec api python -m api.accounts create name@example.com "Имя" --role owner --map demo-ploschadka-hakatona
 ```
 
+Стек рассчитан на сервер 2 ядра / 4 ГБ: у каждого контейнера лимит памяти (воркер склейки — 2,5 ГБ и 1,5 ядра, API — 700 МБ на два процесса uvicorn, Postgres — 700 МБ), логи контейнеров ротируются. Caddy сам отдаёт тайлы, подложки и опубликованные бандлы из тома хранилища (`/media/panos`, `/media/maps`, кэш «навсегда»), сырые кадры, видео и сканы комнат наружу не попадают.
+
+### Бэкапы
+
+`infra/deploy/backup.sh` (на сервере, от root) делает дамп базы (`pg_dump -Fc`, проверяется `pg_restore --list`) и снимок тома хранилища в `/opt/ttkpr/backups`, хранит 7 дней. Снимки файлов связаны жёсткими ссылками с предыдущим днём, поэтому место занимает только новое за день; `MEDIA=0` — только база.
+
+```bash
+bash /opt/ttkpr/infra/deploy/backup.sh
+# каждую ночь в 03:15:
+echo '15 3 * * * root /usr/bin/env bash /opt/ttkpr/infra/deploy/backup.sh >> /var/log/ttkpr-backup.log 2>&1' > /etc/cron.d/ttkpr-backup
+```
+
+Восстановить базу (заменяет текущие данные):
+
+```bash
+cd /opt/ttkpr && docker compose -f infra/docker-compose.yml --env-file infra/.env exec -T postgres \
+  sh -c 'pg_restore --clean --if-exists -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < backups/db/ttk-<дата>.dump
+```
+
+Файлы: `rsync -a backups/media/<дата>/ "$(docker volume inspect -f '{{ .Mountpoint }}' ttkpr_storage)/"`.
+
+### Защита сервера
+
+`infra/deploy/harden-server.sh` включает автоматические обновления безопасности (без автоперезагрузки и без обновления Docker посреди показа) и fail2ban для SSH (адрес, с которого запускали скрипт, не банится). Запуск с компьютера (если мешает VPN — добавьте `-b <IP сетевой карты>`, как в шаге 2):
+
+```powershell
+type infra\deploy\harden-server.sh | ssh -i $env:USERPROFILE\.ssh\ttkpr_deploy root@217.144.184.43 "tr -d '\r' | bash -s"
+```
+
+Вход по SSH только по ключу — отдельным шагом и **только после того**, как во втором окне проверили, что `ssh -i $env:USERPROFILE\.ssh\ttkpr_deploy root@217.144.184.43` пускает без пароля (иначе можно потерять доступ к серверу). Не закрывайте текущую сессию, пока не проверите новый вход:
+
+```powershell
+type infra\deploy\harden-server.sh | ssh -i $env:USERPROFILE\.ssh\ttkpr_deploy root@217.144.184.43 "tr -d '\r' | bash -s -- --disable-password-login"
+```
+
+Скрипт откажется, если в `/root/.ssh/authorized_keys` нет ключей, и проверяет конфигурацию `sshd -t` перед применением. Разбанить адрес: `fail2ban-client set sshd unbanip <ip>`.
+
 ## Что умеет
 
 Подробно по пунктам ТЗ — [docs/TZ.md](docs/TZ.md).

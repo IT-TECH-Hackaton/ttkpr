@@ -1,6 +1,7 @@
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from "geojson";
 import type { AddLayerObject, ExpressionSpecification, FilterSpecification } from "maplibre-gl";
 import type { MapBundle } from "./bundle";
+import { darkVariant } from "./color";
 
 export const SOURCE = {
   units: "plan-units",
@@ -9,6 +10,10 @@ export const SOURCE = {
   panos: "plan-panos",
   connectors: "plan-connectors",
   paths: "plan-paths",
+  /** Labelled areas inside rooms; layers: `detailLayers`. */
+  zones: "plan-zones",
+  /** Furniture (tables, booths, a stage); layers: `detailLayers`. */
+  fixtures: "plan-fixtures",
 } as const;
 
 export const CONNECTOR_LABELS: Record<string, string> = {
@@ -29,6 +34,15 @@ interface PlanProps {
   levelId: string;
   name: string;
   category: string;
+  /** Organizer's fill (#rrggbb) and its dark-theme counterpart; absent = by category. */
+  color?: string;
+  colorDark?: string;
+  /** Rooms and doors closed to visitors (absent = public). */
+  access?: string;
+  /** Door type (openings). */
+  kind?: string;
+  /** Fixtures: routes go around it. */
+  obstacle?: boolean;
 }
 
 export interface PlanCollections {
@@ -38,7 +52,16 @@ export interface PlanCollections {
   panos: FeatureCollection<Point, PlanProps>;
   connectors: FeatureCollection<Point, PlanProps>;
   paths: FeatureCollection<LineString, PlanProps>;
+  /** `category` is "zone". */
+  zones: FeatureCollection<Polygon, PlanProps>;
+  /** `category` is the fixture kind. */
+  fixtures: FeatureCollection<Polygon, PlanProps>;
 }
+
+const colors = (color: string | null | undefined) =>
+  color ? { color, colorDark: darkVariant(color) } : {};
+const restricted = (access: string | null | undefined) =>
+  access && access !== "public" ? { access } : {};
 
 function collection<G extends Polygon | LineString | Point>(
   features: Feature<G, PlanProps>[],
@@ -53,7 +76,14 @@ export function toCollections(bundle: MapBundle): PlanCollections {
         type: "Feature",
         id: u.id,
         geometry: { type: "Polygon", coordinates: u.geometry.coordinates },
-        properties: { id: u.id, levelId: u.levelId, name: u.name ?? "", category: u.category },
+        properties: {
+          id: u.id,
+          levelId: u.levelId,
+          name: u.name ?? "",
+          category: u.category,
+          ...colors(u.color),
+          ...restricted(u.access),
+        },
       })),
     ),
     openings: collection(
@@ -61,7 +91,14 @@ export function toCollections(bundle: MapBundle): PlanCollections {
         type: "Feature",
         id: o.id,
         geometry: { type: "LineString", coordinates: o.geometry.coordinates },
-        properties: { id: o.id, levelId: o.levelId, name: "", category: o.category ?? "door" },
+        properties: {
+          id: o.id,
+          levelId: o.levelId,
+          name: "",
+          category: o.category ?? "door",
+          ...restricted(o.access),
+          ...(o.kind ? { kind: o.kind } : {}),
+        },
       })),
     ),
     pois: collection(
@@ -110,6 +147,35 @@ export function toCollections(bundle: MapBundle): PlanCollections {
         },
       })),
     ),
+    zones: collection(
+      (bundle.zones ?? []).map((z) => ({
+        type: "Feature" as const,
+        id: z.id,
+        geometry: { type: "Polygon" as const, coordinates: z.geometry.coordinates },
+        properties: {
+          id: z.id,
+          levelId: z.levelId,
+          name: z.name,
+          category: "zone",
+          ...colors(z.color),
+        },
+      })),
+    ),
+    fixtures: collection(
+      (bundle.fixtures ?? []).map((f) => ({
+        type: "Feature" as const,
+        id: f.id,
+        geometry: { type: "Polygon" as const, coordinates: f.geometry.coordinates },
+        properties: {
+          id: f.id,
+          levelId: f.levelId,
+          name: f.name ?? "",
+          category: f.kind,
+          obstacle: f.obstacle !== false,
+          ...colors(f.color),
+        },
+      })),
+    ),
   };
 }
 
@@ -135,16 +201,78 @@ export const UNIT_COLORS: Record<string, string> = {
 
 const onLevel = (levelId: string): ExpressionSpecification => ["==", ["get", "levelId"], levelId];
 
+// Label/value pairs are spread dynamically, which the style-spec tuple type cannot express.
+const expression = (value: unknown[]) => value as unknown as ExpressionSpecification;
+
+/**
+ * Room fill: rooms closed to visitors in the non-public colour, else the organizer's colour,
+ * else by category. `dark` reads the precomputed dark counterpart of the organizer's colour.
+ */
+export function unitFillExpression(
+  colors: Record<string, string>,
+  fallback: string,
+  dark = false,
+): ExpressionSpecification {
+  const byCategory = ["match", ["get", "category"], ...Object.entries(colors).flat(), fallback];
+  return expression([
+    "case",
+    ["in", ["coalesce", ["get", "access"], "public"], ["literal", ["staff", "closed"]]],
+    colors.nonpublic ?? fallback,
+    ["to-color", ["get", dark ? "colorDark" : "color"], byCategory],
+  ]);
+}
+
+const OPENING_COLORS = { window: "#7dd3fc", emergency: "#22c55e", closed: "#9ca3af" };
+const OPENING_COLORS_DARK = { window: "#0e7490", emergency: "#15803d", closed: "#4b5563" };
+
+/** Openings: windows light blue, emergency exits green, staff/locked doors grey, others `base`. */
+export function openingColorExpression(base: string, dark = false): ExpressionSpecification {
+  const c = dark ? OPENING_COLORS_DARK : OPENING_COLORS;
+  return expression([
+    "match",
+    ["get", "category"],
+    "window",
+    c.window,
+    [
+      "match",
+      ["coalesce", ["get", "access"], "public"],
+      "public",
+      base,
+      "emergency",
+      c.emergency,
+      c.closed,
+    ],
+  ]);
+}
+
+/** Furniture fill by kind when the organizer gave no colour. */
+export const FIXTURE_COLORS: Record<string, string> = {
+  table: "#dccbab",
+  booth: "#c7d2fe",
+  stage: "#e9d5ff",
+  counter: "#d1d5db",
+  seating: "#fde68a",
+  screen: "#64748b",
+  plant: "#86efac",
+  column: "#9ca3af",
+  shelf: "#dccbab",
+  kiosk: "#bae6fd",
+  other: "#e5e7eb",
+};
+
+export function fixtureFillExpression(dark = false): ExpressionSpecification {
+  const palette = Object.entries(FIXTURE_COLORS).map(([k, v]) => [k, dark ? darkVariant(v) : v]);
+  const byKind = ["match", ["get", "category"], ...palette.flat(), dark ? "#334155" : "#e5e7eb"];
+  return expression(["to-color", ["get", dark ? "colorDark" : "color"], byKind]);
+}
+
+/** Zones without their own colour. */
+export const ZONE_COLOR = "#f59e0b";
+
 /** All plan layers for one level; switch levels with setFilter(layerId, levelFilter(...)). */
 export function planLayers(levelId: string): AddLayerObject[] {
   const filter = levelFilter("units-fill", levelId);
-  // Label/value pairs are spread dynamically, which the style-spec tuple type cannot express.
-  const unitColor = [
-    "match",
-    ["get", "category"],
-    ...Object.entries(UNIT_COLORS).flat(),
-    "#eeeeee",
-  ] as unknown as ExpressionSpecification;
+  const unitColor = unitFillExpression(UNIT_COLORS, "#eeeeee");
 
   return [
     {
@@ -182,7 +310,7 @@ export function planLayers(levelId: string): AddLayerObject[] {
       source: SOURCE.openings,
       filter,
       paint: {
-        "line-color": "#ffffff",
+        "line-color": openingColorExpression("#ffffff"),
         "line-width": ["interpolate", ["linear"], ["zoom"], 17, 2, 21, 6],
       },
     },
@@ -279,6 +407,85 @@ export const LEVEL_FILTERED_LAYERS = [
   "panos",
   "pois",
   "pois-label",
+] as const;
+
+/**
+ * Zones and furniture of one level. Needs the sources `SOURCE.zones` and `SOURCE.fixtures`
+ * (`toCollections`); add the layers above the rooms, before "paths". Switch levels like the
+ * plan layers, with `levelFilter` over `DETAIL_LAYERS`.
+ */
+export function detailLayers(levelId: string): AddLayerObject[] {
+  const filter = levelFilter("zones-fill", levelId);
+  const zoneColor = expression(["to-color", ["get", "color"], ZONE_COLOR]);
+  const thin = expression(["interpolate", ["linear"], ["zoom"], 17, 0.5, 21, 2]);
+  return [
+    {
+      id: "zones-fill",
+      type: "fill",
+      source: SOURCE.zones,
+      filter,
+      paint: { "fill-color": zoneColor, "fill-opacity": 0.16 },
+    },
+    {
+      id: "zones-outline",
+      type: "line",
+      source: SOURCE.zones,
+      filter,
+      paint: { "line-color": zoneColor, "line-width": thin, "line-dasharray": [3, 2] },
+    },
+    {
+      id: "fixtures-fill",
+      type: "fill",
+      source: SOURCE.fixtures,
+      filter,
+      paint: { "fill-color": fixtureFillExpression(), "fill-opacity": 0.95 },
+    },
+    {
+      id: "fixtures-outline",
+      type: "line",
+      source: SOURCE.fixtures,
+      filter,
+      paint: { "line-color": "#94a3b8", "line-width": thin },
+    },
+    {
+      id: "zones-label",
+      type: "symbol",
+      source: SOURCE.zones,
+      filter,
+      layout: {
+        "text-field": ["get", "name"],
+        "text-font": PLAN_FONT,
+        "text-size": 12,
+        "text-max-width": 8,
+        "text-optional": true,
+      },
+      paint: { "text-color": "#92400e", "text-halo-color": "#ffffff", "text-halo-width": 1.5 },
+    },
+    {
+      id: "fixtures-label",
+      type: "symbol",
+      source: SOURCE.fixtures,
+      filter,
+      minzoom: 19.5,
+      layout: {
+        "text-field": ["get", "name"],
+        "text-font": PLAN_FONT,
+        "text-size": 10,
+        "text-max-width": 6,
+        "text-optional": true,
+      },
+      paint: { "text-color": "#475569", "text-halo-color": "#ffffff", "text-halo-width": 1 },
+    },
+  ];
+}
+
+export const DETAIL_LAYERS = [
+  "zones-fill",
+  "zones-outline",
+  "fixtures-fill",
+  "fixtures-outline",
+  "zones-label",
+  "fixtures-label",
 ] as const;
 
 export function levelFilter(layerId: string, levelId: string): FilterSpecification {

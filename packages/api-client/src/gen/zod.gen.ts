@@ -13,12 +13,61 @@ export const zAccessMode = z.enum([
 ]);
 
 /**
+ * Amenity
+ */
+export const zAmenity = z.enum([
+    'wifi',
+    'power',
+    'accessible',
+    'toilet',
+    'water',
+    'food',
+    'quiet',
+    'kids',
+    'ac',
+    'projector',
+    'parking',
+    'firstaid',
+    'info'
+]);
+
+/**
+ * AnnouncementKind
+ */
+export const zAnnouncementKind = z.enum([
+    'info',
+    'warning',
+    'success'
+]);
+
+/**
+ * Announcement
+ *
+ * A banner for visitors, shown between `start` and `end` (open ends: always).
+ */
+export const zAnnouncement = z.object({
+    id: z.string().max(64).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/),
+    text: z.string().min(1).max(500),
+    kind: zAnnouncementKind.optional().default('info'),
+    start: z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]{1,9})?)?([Zz]|[+-][0-9]{2}:?[0-9]{2})$/).nullish(),
+    end: z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]{1,9})?)?([Zz]|[+-][0-9]{2}:?[0-9]{2})$/).nullish(),
+    poiId: z.string().max(200).nullish()
+});
+
+/**
  * AssetOut
  */
 export const zAssetOut = z.object({
     url: z.string(),
     width: z.int(),
     height: z.int()
+});
+
+/**
+ * Body_create_plan_import
+ */
+export const zBodyCreatePlanImport = z.object({
+    file: z.string()
 });
 
 /**
@@ -45,6 +94,17 @@ export const zBodyUploadPanorama = z.object({
     lon: z.number(),
     lat: z.number(),
     headingDeg: z.number().optional().default(0)
+});
+
+/**
+ * Branding
+ */
+export const zBranding = z.object({
+    accentColor: z.string().max(7).regex(/^#[0-9A-Fa-f]{6}$/).nullish(),
+    logoUrl: z.string().max(2048).regex(/^(https:\/\/[^\s\/?#<>\"'`\\@:]+(:[0-9]{1,5})?([\/?#][^\s<>\"'`\\]*)?|\/media\/[A-Za-z0-9._~\/-]+)$/).nullish(),
+    coverUrl: z.string().max(2048).regex(/^(https:\/\/[^\s\/?#<>\"'`\\@:]+(:[0-9]{1,5})?([\/?#][^\s<>\"'`\\]*)?|\/media\/[A-Za-z0-9._~\/-]+)$/).nullish(),
+    welcomeTitle: z.string().min(1).max(200).nullish(),
+    welcomeText: z.string().min(1).max(1000).nullish()
 });
 
 /**
@@ -90,6 +150,46 @@ export const zConnector = z.object({
     name: z.string().nullish(),
     points: z.array(zConnectorPoint).min(2)
 });
+
+/**
+ * CustomCategory
+ *
+ * An organizer's POI category, in addition to the built-in ones (same id overrides one).
+ */
+export const zCustomCategory = z.object({
+    id: z.string().max(32).regex(/^[a-z0-9][a-z0-9_-]{0,31}$/),
+    label: z.string().min(1).max(60),
+    emoji: z.string().max(16).regex(/^[^\s<>]{1,16}$/).nullish(),
+    color: z.string().max(7).regex(/^#[0-9A-Fa-f]{6}$/).nullish()
+});
+
+/**
+ * DoorKind
+ */
+export const zDoorKind = z.enum([
+    'single',
+    'double',
+    'sliding',
+    'revolving',
+    'automatic'
+]);
+
+/**
+ * FixtureKind
+ */
+export const zFixtureKind = z.enum([
+    'table',
+    'booth',
+    'stage',
+    'counter',
+    'seating',
+    'screen',
+    'plant',
+    'column',
+    'shelf',
+    'kiosk',
+    'other'
+]);
 
 /**
  * InviteAccept
@@ -212,12 +312,25 @@ export const zMemberUpdate = z.object({
 });
 
 /**
+ * OpeningAccess
+ *
+ * Routes use only public openings; windows are never passable.
+ */
+export const zOpeningAccess = z.enum([
+    'public',
+    'staff',
+    'emergency',
+    'locked'
+]);
+
+/**
  * OpeningCategory
  */
 export const zOpeningCategory = z.enum([
     'door',
     'passage',
-    'entrance'
+    'entrance',
+    'window'
 ]);
 
 /**
@@ -227,7 +340,12 @@ export const zOpening = z.object({
     id: z.string(),
     levelId: z.string(),
     category: zOpeningCategory.optional().default('door'),
-    geometry: zLineStringGeometry
+    geometry: zLineStringGeometry,
+    access: zOpeningAccess.optional().default('public'),
+    kind: zDoorKind.nullish(),
+    widthM: z.number().gte(0.3).lte(30).nullish(),
+    sillHeightM: z.number().gte(0).lte(10).nullish(),
+    heightM: z.number().gt(0).lte(10).nullish()
 });
 
 /**
@@ -348,16 +466,79 @@ export const zPathLine = z.object({
 });
 
 /**
- * Poi
+ * PlaceStatus
  */
-export const zPoi = z.object({
-    id: z.string(),
-    levelId: z.string(),
-    name: z.string(),
-    category: z.string(),
-    description: z.string().nullish(),
-    position: z.tuple([z.number(), z.number()]),
-    heightM: z.number().optional().default(1.2)
+export const zPlaceStatus = z.enum([
+    'open',
+    'busy',
+    'closed'
+]);
+
+/**
+ * LivePlace
+ */
+export const zLivePlace = z.object({
+    status: zPlaceStatus,
+    note: z.string().nullable(),
+    updatedAt: z.iso.datetime()
+});
+
+/**
+ * LiveOut
+ */
+export const zLiveOut = z.object({
+    updatedAt: z.iso.datetime().nullable(),
+    places: z.record(z.string(), zLivePlace)
+});
+
+/**
+ * LivePlaceOut
+ */
+export const zLivePlaceOut = z.object({
+    status: zPlaceStatus,
+    note: z.string().nullable(),
+    updatedAt: z.iso.datetime(),
+    poiId: z.string()
+});
+
+/**
+ * LiveUpdate
+ */
+export const zLiveUpdate = z.object({
+    status: zPlaceStatus,
+    note: z.string().max(140).nullish()
+});
+
+/**
+ * PoiContacts
+ */
+export const zPoiContacts = z.object({
+    phone: z.string().max(32).regex(/^\+?[0-9][0-9 ()-]{3,30}[0-9]$/).nullish(),
+    email: z.string().max(254).regex(/^[^\s@<>()\[\],;:\"]+@[^\s@<>()\[\],;:\"]+\.[^\s@<>()\[\],;:\"]+$/).nullish(),
+    telegram: z.string().max(64).regex(/^(@?[A-Za-z0-9_]{4,32}|https:\/\/t\.me\/[A-Za-z0-9_]{4,32})$/).nullish(),
+    website: z.string().max(2048).regex(/^(https?:\/\/[^\s\/?#<>\"'`\\@:]+(:[0-9]{1,5})?([\/?#][^\s<>\"'`\\]*)?|\/media\/[A-Za-z0-9._~\/-]+)$/).nullish()
+});
+
+/**
+ * PoiEvent
+ *
+ * A talk, a show, a session at this place. Times carry their offset.
+ */
+export const zPoiEvent = z.object({
+    id: z.string().max(64).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/),
+    title: z.string().min(1).max(200),
+    start: z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]{1,9})?)?([Zz]|[+-][0-9]{2}:?[0-9]{2})$/),
+    end: z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]{1,9})?)?([Zz]|[+-][0-9]{2}:?[0-9]{2})$/),
+    description: z.string().min(1).max(1000).nullish(),
+    speaker: z.string().min(1).max(120).nullish()
+});
+
+/**
+ * PoiLink
+ */
+export const zPoiLink = z.object({
+    title: z.string().min(1).max(80),
+    url: z.string().max(2048).regex(/^(https?:\/\/[^\s\/?#<>\"'`\\@:]+(:[0-9]{1,5})?([\/?#][^\s<>\"'`\\]*)?|\/media\/[A-Za-z0-9._~\/-]+)$/)
 });
 
 /**
@@ -366,6 +547,24 @@ export const zPoi = z.object({
 export const zPolygonGeometry = z.object({
     type: z.literal('Polygon').optional().default('Polygon'),
     coordinates: z.array(z.array(z.tuple([z.number(), z.number()]))).min(1)
+});
+
+/**
+ * Fixture
+ *
+ * Furniture and fittings inside a room (IMDF «fixture»): tables, booths, a stage, columns.
+ *
+ * Obstacles are holes in the floor for routing: routes go around them, never across.
+ */
+export const zFixture = z.object({
+    id: z.string().max(64).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/),
+    levelId: z.string().min(1).max(200),
+    kind: zFixtureKind,
+    name: z.string().min(1).max(120).nullish(),
+    geometry: zPolygonGeometry,
+    heightM: z.number().gt(0).lte(50).nullish(),
+    obstacle: z.boolean().optional().default(true),
+    color: z.string().max(7).regex(/^#[0-9A-Fa-f]{6}$/).nullish()
 });
 
 /**
@@ -392,6 +591,44 @@ export const zRegisterRequest = z.object({
     email: z.email(),
     name: z.string().min(1).max(200),
     password: z.string().min(8).max(200)
+});
+
+/**
+ * ScanStatus
+ */
+export const zScanStatus = z.enum([
+    'uploading',
+    'processing',
+    'ready',
+    'failed'
+]);
+
+/**
+ * PlanImportOut
+ */
+export const zPlanImportOut = z.object({
+    id: z.uuid(),
+    mapId: z.uuid(),
+    status: zScanStatus,
+    progress: z.int(),
+    error: z.string().nullable(),
+    result: z.record(z.string(), z.unknown()).nullable(),
+    createdAt: z.iso.datetime()
+});
+
+/**
+ * RoomScanOut
+ */
+export const zRoomScanOut = z.object({
+    id: z.uuid(),
+    mapId: z.uuid(),
+    levelId: z.string(),
+    status: zScanStatus,
+    progress: z.int(),
+    error: z.string().nullable(),
+    cameraHeightM: z.number(),
+    result: z.record(z.string(), z.unknown()).nullable(),
+    createdAt: z.iso.datetime()
 });
 
 /**
@@ -439,6 +676,37 @@ export const zTour = z.object({
 });
 
 /**
+ * Translation
+ *
+ * Name and description in another language; missing parts fall back to the original.
+ */
+export const zTranslation = z.object({
+    name: z.string().min(1).max(120).nullish(),
+    description: z.string().min(1).max(2000).nullish()
+});
+
+/**
+ * Poi
+ */
+export const zPoi = z.object({
+    id: z.string(),
+    levelId: z.string(),
+    name: z.string(),
+    category: z.string(),
+    description: z.string().nullish(),
+    position: z.tuple([z.number(), z.number()]),
+    heightM: z.number().optional().default(1.2),
+    photos: z.array(z.string().max(2048).regex(/^(https:\/\/[^\s\/?#<>\"'`\\@:]+(:[0-9]{1,5})?([\/?#][^\s<>\"'`\\]*)?|\/media\/[A-Za-z0-9._~\/-]+)$/)).max(10).optional(),
+    links: z.array(zPoiLink).max(5).optional(),
+    contacts: zPoiContacts.nullish(),
+    hours: z.string().min(1).max(120).nullish(),
+    tags: z.array(z.string().min(1).max(40)).max(10).optional(),
+    featured: z.boolean().optional().default(false),
+    events: z.array(zPoiEvent).max(50).optional(),
+    translations: z.record(z.string(), zTranslation).optional()
+});
+
+/**
  * Underlay
  *
  * Raster plan placed under the drawing (uploaded image), per level.
@@ -455,6 +723,17 @@ export const zUnderlay = z.object({
     ]),
     opacity: z.number().gte(0).lte(1).optional().default(0.6)
 });
+
+/**
+ * UnitAccess
+ *
+ * Who may enter. Routes go only through public rooms.
+ */
+export const zUnitAccess = z.enum([
+    'public',
+    'staff',
+    'closed'
+]);
 
 /**
  * UnitCategory
@@ -480,7 +759,16 @@ export const zUnit = z.object({
     name: z.string().nullish(),
     category: zUnitCategory,
     walkable: z.boolean().optional().default(true),
-    geometry: zPolygonGeometry
+    geometry: zPolygonGeometry,
+    access: zUnitAccess.optional().default('public'),
+    heightM: z.number().gte(1.5).lte(50).nullish(),
+    color: z.string().max(7).regex(/^#[0-9A-Fa-f]{6}$/).nullish(),
+    description: z.string().min(1).max(2000).nullish(),
+    photos: z.array(z.string().max(2048).regex(/^(https:\/\/[^\s\/?#<>\"'`\\@:]+(:[0-9]{1,5})?([\/?#][^\s<>\"'`\\]*)?|\/media\/[A-Za-z0-9._~\/-]+)$/)).max(10).optional(),
+    capacity: z.int().gte(1).lte(1000000).nullish(),
+    amenities: z.array(zAmenity).max(20).optional(),
+    hours: z.string().min(1).max(120).nullish(),
+    translations: z.record(z.string(), zTranslation).optional()
 });
 
 /**
@@ -517,41 +805,12 @@ export const zVenue = z.object({
     id: z.string(),
     name: z.string(),
     anchor: z.tuple([z.number(), z.number()]),
-    address: z.string().nullish()
-});
-
-/**
- * MapDocument
- */
-export const zMapDocument = z.object({
-    schemaVersion: z.int().optional().default(1),
-    venue: zVenue,
-    buildings: z.array(zBuilding).optional().default([]),
-    levels: z.array(zLevel).optional().default([]),
-    units: z.array(zUnit).optional().default([]),
-    openings: z.array(zOpening).optional().default([]),
-    connectors: z.array(zConnector).optional().default([]),
-    pois: z.array(zPoi).optional().default([]),
-    panos: z.array(zPano).optional().default([]),
-    paths: z.array(zPathLine).optional().default([]),
-    tours: z.array(zTour).optional().default([]),
-    underlays: z.array(zUnderlay).optional().default([])
-});
-
-/**
- * DraftOut
- */
-export const zDraftOut = z.object({
-    document: zMapDocument,
-    version: z.int()
-});
-
-/**
- * DraftSave
- */
-export const zDraftSave = z.object({
-    document: zMapDocument,
-    version: z.int()
+    address: z.string().nullish(),
+    branding: zBranding.nullish(),
+    announcements: z.array(zAnnouncement).max(20).optional(),
+    categories: z.array(zCustomCategory).max(50).optional(),
+    timezone: z.string().max(64).regex(/^(UTC|[A-Za-z]+(\/[A-Za-z0-9_+-]+){1,2})$/).optional().default('Europe/Moscow'),
+    languages: z.array(z.string().max(35).regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,2}$/)).max(10).optional()
 });
 
 /**
@@ -571,6 +830,57 @@ export const zPublishOut = z.object({
     number: z.int(),
     status: zVersionStatus,
     slug: z.string()
+});
+
+/**
+ * Zone
+ *
+ * A labelled area inside rooms (фудкорт, зона тишины). Does not affect routes.
+ */
+export const zZone = z.object({
+    id: z.string().max(64).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/),
+    levelId: z.string().min(1).max(200),
+    name: z.string().min(1).max(120),
+    color: z.string().max(7).regex(/^#[0-9A-Fa-f]{6}$/).nullish(),
+    geometry: zPolygonGeometry,
+    description: z.string().min(1).max(2000).nullish(),
+    translations: z.record(z.string(), zTranslation).optional()
+});
+
+/**
+ * MapDocument
+ */
+export const zMapDocument = z.object({
+    schemaVersion: z.int().optional().default(2),
+    venue: zVenue,
+    buildings: z.array(zBuilding).optional().default([]),
+    levels: z.array(zLevel).optional().default([]),
+    units: z.array(zUnit).optional().default([]),
+    openings: z.array(zOpening).optional().default([]),
+    connectors: z.array(zConnector).optional().default([]),
+    pois: z.array(zPoi).optional().default([]),
+    panos: z.array(zPano).optional().default([]),
+    paths: z.array(zPathLine).optional().default([]),
+    tours: z.array(zTour).optional().default([]),
+    underlays: z.array(zUnderlay).optional().default([]),
+    fixtures: z.array(zFixture).max(5000).optional(),
+    zones: z.array(zZone).max(1000).optional()
+});
+
+/**
+ * DraftOut
+ */
+export const zDraftOut = z.object({
+    document: zMapDocument,
+    version: z.int()
+});
+
+/**
+ * DraftSave
+ */
+export const zDraftSave = z.object({
+    document: zMapDocument,
+    version: z.int()
 });
 
 /**
@@ -831,6 +1141,27 @@ export const zUploadPanoramaPath = z.object({
  */
 export const zUploadPanoramaResponse = zPanoramaOut;
 
+/**
+ * VideoPanoramaForm
+ */
+export const zUploadPanoramaVideoBody = z.object({
+    file: z.string(),
+    orientation: z.string().optional(),
+    levelId: z.string().min(1).max(64),
+    lon: z.number().gte(-180).lte(180),
+    lat: z.number().gte(-90).lte(90),
+    headingDeg: z.number().nullish()
+});
+
+export const zUploadPanoramaVideoPath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zUploadPanoramaVideoResponse = zPanoramaOut;
+
 export const zDeletePanoramaPath = z.object({
     pano_id: z.uuid()
 });
@@ -859,6 +1190,114 @@ export const zUpdatePanoramaPath = z.object({
  * Successful Response
  */
 export const zUpdatePanoramaResponse = zPanoramaOut;
+
+export const zListScansPath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Response List Scans
+ *
+ * Successful Response
+ */
+export const zListScansResponse = z.array(zRoomScanOut);
+
+/**
+ * RoomScanForm
+ */
+export const zCreateScanBody = z.object({
+    file: z.string(),
+    orientation: z.string().optional(),
+    levelId: z.string().min(1).max(64),
+    cameraHeightM: z.number().gte(0.3).lte(3).optional().default(1.5)
+});
+
+export const zCreateScanPath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zCreateScanResponse = zRoomScanOut;
+
+export const zDeleteScanPath = z.object({
+    scan_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zDeleteScanResponse = z.void();
+
+export const zGetScanPath = z.object({
+    scan_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zGetScanResponse = zRoomScanOut;
+
+export const zCreatePlanImportBody = zBodyCreatePlanImport;
+
+export const zCreatePlanImportPath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zCreatePlanImportResponse = zPlanImportOut;
+
+export const zGetPlanImportPath = z.object({
+    job_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zGetPlanImportResponse = zPlanImportOut;
+
+export const zClearLiveStatusPath = z.object({
+    map_id: z.uuid(),
+    poi_id: z.string().min(1).max(64)
+});
+
+/**
+ * Successful Response
+ */
+export const zClearLiveStatusResponse = z.void();
+
+export const zSetLiveStatusBody = zLiveUpdate;
+
+export const zSetLiveStatusPath = z.object({
+    map_id: z.uuid(),
+    poi_id: z.string().min(1).max(64)
+});
+
+/**
+ * Successful Response
+ */
+export const zSetLiveStatusResponse = zLivePlaceOut;
+
+export const zListLivePath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zListLiveResponse = zLiveOut;
+
+export const zGetLivePath = z.object({
+    slug: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zGetLiveResponse = zLiveOut;
 
 export const zGetManifestPath = z.object({
     slug: z.string()

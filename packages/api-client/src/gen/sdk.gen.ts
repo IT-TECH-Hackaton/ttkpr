@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AcceptInviteData, AcceptInviteErrors, AcceptInviteResponses, AddMemberData, AddMemberErrors, AddMemberResponses, ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, CreateCaptureData, CreateCaptureErrors, CreateCaptureResponses, CreateCaptureTokenData, CreateCaptureTokenErrors, CreateCaptureTokenResponses, CreateInviteData, CreateInviteErrors, CreateInviteResponses, CreateMapData, CreateMapErrors, CreateMapResponses, DeleteMapData, DeleteMapErrors, DeleteMapResponses, DeletePanoramaData, DeletePanoramaErrors, DeletePanoramaResponses, GetBundleData, GetBundleErrors, GetBundleResponses, GetDraftData, GetDraftErrors, GetDraftResponses, GetManifestData, GetManifestErrors, GetManifestResponses, GetMapData, GetMapErrors, GetMapResponses, GetPanoramaData, GetPanoramaErrors, GetPanoramaResponses, HealthData, HealthResponses, ListMapsData, ListMapsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListPanoramasData, ListPanoramasErrors, ListPanoramasResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutEverywhereData, LogoutEverywhereResponses, LogoutResponses, MapStatsData, MapStatsErrors, MapStatsResponses, MeData, MeResponses, PublishData, PublishErrors, PublishResponses, RecordEventsData, RecordEventsErrors, RecordEventsResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, SaveDraftData, SaveDraftErrors, SaveDraftResponses, StartStitchingData, StartStitchingErrors, StartStitchingResponses, UpdateMapData, UpdateMapErrors, UpdateMapResponses, UpdateMemberData, UpdateMemberErrors, UpdateMemberResponses, UpdatePanoramaData, UpdatePanoramaErrors, UpdatePanoramaResponses, UpdateProfileData, UpdateProfileErrors, UpdateProfileResponses, UploadAssetData, UploadAssetErrors, UploadAssetResponses, UploadFrameData, UploadFrameErrors, UploadFrameResponses, UploadPanoramaData, UploadPanoramaErrors, UploadPanoramaResponses } from './types.gen';
+import type { AcceptInviteData, AcceptInviteErrors, AcceptInviteResponses, AddMemberData, AddMemberErrors, AddMemberResponses, ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ClearLiveStatusData, ClearLiveStatusErrors, ClearLiveStatusResponses, CreateCaptureData, CreateCaptureErrors, CreateCaptureResponses, CreateCaptureTokenData, CreateCaptureTokenErrors, CreateCaptureTokenResponses, CreateInviteData, CreateInviteErrors, CreateInviteResponses, CreateMapData, CreateMapErrors, CreateMapResponses, CreatePlanImportData, CreatePlanImportErrors, CreatePlanImportResponses, CreateScanData, CreateScanErrors, CreateScanResponses, DeleteMapData, DeleteMapErrors, DeleteMapResponses, DeletePanoramaData, DeletePanoramaErrors, DeletePanoramaResponses, DeleteScanData, DeleteScanErrors, DeleteScanResponses, GetBundleData, GetBundleErrors, GetBundleResponses, GetDraftData, GetDraftErrors, GetDraftResponses, GetLiveData, GetLiveErrors, GetLiveResponses, GetManifestData, GetManifestErrors, GetManifestResponses, GetMapData, GetMapErrors, GetMapResponses, GetPanoramaData, GetPanoramaErrors, GetPanoramaResponses, GetPlanImportData, GetPlanImportErrors, GetPlanImportResponses, GetScanData, GetScanErrors, GetScanResponses, HealthData, HealthResponses, ListLiveData, ListLiveErrors, ListLiveResponses, ListMapsData, ListMapsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListPanoramasData, ListPanoramasErrors, ListPanoramasResponses, ListScansData, ListScansErrors, ListScansResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutEverywhereData, LogoutEverywhereResponses, LogoutResponses, MapStatsData, MapStatsErrors, MapStatsResponses, MeData, MeResponses, PublishData, PublishErrors, PublishResponses, RecordEventsData, RecordEventsErrors, RecordEventsResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, SaveDraftData, SaveDraftErrors, SaveDraftResponses, SetLiveStatusData, SetLiveStatusErrors, SetLiveStatusResponses, StartStitchingData, StartStitchingErrors, StartStitchingResponses, UpdateMapData, UpdateMapErrors, UpdateMapResponses, UpdateMemberData, UpdateMemberErrors, UpdateMemberResponses, UpdatePanoramaData, UpdatePanoramaErrors, UpdatePanoramaResponses, UpdateProfileData, UpdateProfileErrors, UpdateProfileResponses, UploadAssetData, UploadAssetErrors, UploadAssetResponses, UploadFrameData, UploadFrameErrors, UploadFrameResponses, UploadPanoramaData, UploadPanoramaErrors, UploadPanoramaResponses, UploadPanoramaVideoData, UploadPanoramaVideoErrors, UploadPanoramaVideoResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -267,6 +267,8 @@ export const uploadFrame = <ThrowOnError extends boolean = false>(options: Optio
 
 /**
  * Start Stitching
+ *
+ * Stitches the uploaded frames; for a failed video or uploaded panorama, tries again.
  */
 export const startStitching = <ThrowOnError extends boolean = false>(options: Options<StartStitchingData, ThrowOnError>): RequestResult<StartStitchingResponses, StartStitchingErrors, ThrowOnError> => (options.client ?? client).post<StartStitchingResponses, StartStitchingErrors, ThrowOnError>({ url: '/api/panoramas/{pano_id}/stitch', ...options });
 
@@ -278,6 +280,25 @@ export const startStitching = <ThrowOnError extends boolean = false>(options: Op
 export const uploadPanorama = <ThrowOnError extends boolean = false>(options: Options<UploadPanoramaData, ThrowOnError>): RequestResult<UploadPanoramaResponses, UploadPanoramaErrors, ThrowOnError> => (options.client ?? client).post<UploadPanoramaResponses, UploadPanoramaErrors, ThrowOnError>({
     ...formDataBodySerializer,
     url: '/api/maps/{map_id}/panoramas/upload',
+    ...options,
+    headers: {
+        'Content-Type': null,
+        ...options.headers
+    }
+});
+
+/**
+ * Upload Panorama Video
+ *
+ * Panorama from a video: stand in the middle and turn around once, phone upright.
+ *
+ * Same access as the photo capture: organizer session or the QR token (X-Capture-Token).
+ * Stored as captures/{id}/video.{webm|mp4|mov} (+ orientation.json), never served;
+ * worker.tasks.stitch_video makes the equirect and tiles, progress as for photo captures.
+ */
+export const uploadPanoramaVideo = <ThrowOnError extends boolean = false>(options: Options<UploadPanoramaVideoData, ThrowOnError>): RequestResult<UploadPanoramaVideoResponses, UploadPanoramaVideoErrors, ThrowOnError> => (options.client ?? client).post<UploadPanoramaVideoResponses, UploadPanoramaVideoErrors, ThrowOnError>({
+    ...formDataBodySerializer,
+    url: '/api/maps/{map_id}/panoramas/video',
     ...options,
     headers: {
         'Content-Type': null,
@@ -308,12 +329,106 @@ export const updatePanorama = <ThrowOnError extends boolean = false>(options: Op
 });
 
 /**
+ * List Scans
+ *
+ * Newest first. Also with the QR capture token, so the phone can show what it sent.
+ */
+export const listScans = <ThrowOnError extends boolean = false>(options: Options<ListScansData, ThrowOnError>): RequestResult<ListScansResponses, ListScansErrors, ThrowOnError> => (options.client ?? client).get<ListScansResponses, ListScansErrors, ThrowOnError>({ url: '/api/maps/{map_id}/scans', ...options });
+
+/**
+ * Create Scan
+ *
+ * Video of one room, filmed walking along the walls with the camera at chest height.
+ */
+export const createScan = <ThrowOnError extends boolean = false>(options: Options<CreateScanData, ThrowOnError>): RequestResult<CreateScanResponses, CreateScanErrors, ThrowOnError> => (options.client ?? client).post<CreateScanResponses, CreateScanErrors, ThrowOnError>({
+    ...formDataBodySerializer,
+    url: '/api/maps/{map_id}/scans',
+    ...options,
+    headers: {
+        'Content-Type': null,
+        ...options.headers
+    }
+});
+
+/**
+ * Delete Scan
+ */
+export const deleteScan = <ThrowOnError extends boolean = false>(options: Options<DeleteScanData, ThrowOnError>): RequestResult<DeleteScanResponses, DeleteScanErrors, ThrowOnError> => (options.client ?? client).delete<DeleteScanResponses, DeleteScanErrors, ThrowOnError>({ url: '/api/scans/{scan_id}', ...options });
+
+/**
+ * Get Scan
+ *
+ * Polled while the worker runs: status, progress, then the result.
+ */
+export const getScan = <ThrowOnError extends boolean = false>(options: Options<GetScanData, ThrowOnError>): RequestResult<GetScanResponses, GetScanErrors, ThrowOnError> => (options.client ?? client).get<GetScanResponses, GetScanErrors, ThrowOnError>({ url: '/api/scans/{scan_id}', ...options });
+
+/**
+ * Create Plan Import
+ *
+ * Start recognising a plan: an image or a PDF with one floor per page (up to 12).
+ */
+export const createPlanImport = <ThrowOnError extends boolean = false>(options: Options<CreatePlanImportData, ThrowOnError>): RequestResult<CreatePlanImportResponses, CreatePlanImportErrors, ThrowOnError> => (options.client ?? client).post<CreatePlanImportResponses, CreatePlanImportErrors, ThrowOnError>({
+    ...formDataBodySerializer,
+    url: '/api/maps/{map_id}/plan-imports',
+    ...options,
+    headers: {
+        'Content-Type': null,
+        ...options.headers
+    }
+});
+
+/**
+ * Get Plan Import
+ *
+ * Polled while the worker runs: status, progress, then the recognised plan.
+ */
+export const getPlanImport = <ThrowOnError extends boolean = false>(options: Options<GetPlanImportData, ThrowOnError>): RequestResult<GetPlanImportResponses, GetPlanImportErrors, ThrowOnError> => (options.client ?? client).get<GetPlanImportResponses, GetPlanImportErrors, ThrowOnError>({ url: '/api/plan-imports/{job_id}', ...options });
+
+/**
+ * Clear Live Status
+ *
+ * Back to no status. Idempotent: clearing a place without one is fine.
+ */
+export const clearLiveStatus = <ThrowOnError extends boolean = false>(options: Options<ClearLiveStatusData, ThrowOnError>): RequestResult<ClearLiveStatusResponses, ClearLiveStatusErrors, ThrowOnError> => (options.client ?? client).delete<ClearLiveStatusResponses, ClearLiveStatusErrors, ThrowOnError>({ url: '/api/maps/{map_id}/live/{poi_id}', ...options });
+
+/**
+ * Set Live Status
+ */
+export const setLiveStatus = <ThrowOnError extends boolean = false>(options: Options<SetLiveStatusData, ThrowOnError>): RequestResult<SetLiveStatusResponses, SetLiveStatusErrors, ThrowOnError> => (options.client ?? client).put<SetLiveStatusResponses, SetLiveStatusErrors, ThrowOnError>({
+    url: '/api/maps/{map_id}/live/{poi_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List Live
+ *
+ * For the studio, also before the map is published.
+ */
+export const listLive = <ThrowOnError extends boolean = false>(options: Options<ListLiveData, ThrowOnError>): RequestResult<ListLiveResponses, ListLiveErrors, ThrowOnError> => (options.client ?? client).get<ListLiveResponses, ListLiveErrors, ThrowOnError>({ url: '/api/maps/{map_id}/live', ...options });
+
+/**
+ * Get Live
+ *
+ * Statuses of the published map for visitors; members only for private maps.
+ */
+export const getLive = <ThrowOnError extends boolean = false>(options: Options<GetLiveData, ThrowOnError>): RequestResult<GetLiveResponses, GetLiveErrors, ThrowOnError> => (options.client ?? client).get<GetLiveResponses, GetLiveErrors, ThrowOnError>({ url: '/api/public/maps/{slug}/live.json', ...options });
+
+/**
  * Get Manifest
+ *
+ * Points at the current version. Public maps: the static bundle under /media, served by
+ * Caddy and cached forever; members-only maps: the API route that checks the session.
  */
 export const getManifest = <ThrowOnError extends boolean = false>(options: Options<GetManifestData, ThrowOnError>): RequestResult<GetManifestResponses, GetManifestErrors, ThrowOnError> => (options.client ?? client).get<GetManifestResponses, GetManifestErrors, ThrowOnError>({ url: '/api/public/maps/{slug}/manifest.json', ...options });
 
 /**
  * Get Bundle
+ *
+ * Kept for members-only maps and for manifests saved (offline) before static bundles.
  */
 export const getBundle = <ThrowOnError extends boolean = false>(options: Options<GetBundleData, ThrowOnError>): RequestResult<GetBundleResponses, GetBundleErrors, ThrowOnError> => (options.client ?? client).get<GetBundleResponses, GetBundleErrors, ThrowOnError>({ url: '/api/public/maps/{slug}/v/{number}/bundle.json', ...options });
 

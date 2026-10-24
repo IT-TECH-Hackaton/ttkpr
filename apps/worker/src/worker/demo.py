@@ -1,14 +1,20 @@
-"""Generates the demo venue and a synthetic grid panorama.
+"""Generates the demo venue with a real 360° scene in every main room.
 
     uv run --package worker python -m worker.demo
 
 Writes fixtures/demo-map.json and apps/viewer/public/demo/ (manifest, bundle, pano tiles).
-The grid panorama labels yaw/pitch, so plan <-> pano projections can be checked by eye.
+The scenes are CC0 interiors from Poly Haven (https://polyhaven.com/hdris/indoor), downloaded
+once into data/pano-src/ (not in git) and tiled like captured panoramas. `--grid` puts the
+synthetic yaw/pitch grid everywhere instead, to check plan <-> pano projections by eye.
 """
 
+import argparse
 import json
+import shutil
 import tempfile
+import urllib.request
 from pathlib import Path
+from typing import NamedTuple
 
 import cv2
 import numpy as np
@@ -38,7 +44,35 @@ from worker.tiles import make_tiles
 
 ROOT = Path(__file__).resolve().parents[4]
 ANCHOR = (37.6200, 55.7540)
-PANO_URL = "/demo/pano-grid"
+SCENES_DIR = ROOT / "data" / "pano-src"
+SCENE_URL = "https://dl.polyhaven.org/file/ph-assets/HDRIs/extra/Tonemapped%20JPG/{}.jpg"
+
+
+class DemoPano(NamedTuple):
+    id: str
+    level_id: str
+    x: float
+    y: float
+    heading: float
+    scene: str
+
+
+# Where the camera stands (local metres) and which Poly Haven scene plays the room.
+DEMO_PANOS = [
+    DemoPano("pano-corridor-west", "l1", 10, 10, 0, "large_corridor"),
+    DemoPano("pano-corridor-east", "l1", 30, 10, 90, "newman_lobby"),
+    DemoPano("pano-hall-a", "l1", 10, 4.5, 0, "events_hall_interior"),
+    DemoPano("pano-lobby", "l1", 35, 5, 270, "entrance_hall"),
+    DemoPano("pano-hall-b", "l1", 10, 16, 0, "music_hall_02"),
+    DemoPano("pano-cafe", "l1", 24, 17, 90, "comfy_cafe"),
+    DemoPano("pano-tent", "l1", 35, -19, 0, "floral_tent"),
+    DemoPano("pano-conf", "l2", 8.5, 5, 0, "poly_haven_studio"),
+    DemoPano("pano-lab", "l2", 8, 17, 90, "university_workshop"),
+]
+
+
+def pano_url(pano_id: str) -> str:
+    return f"/demo/{pano_id}"
 
 
 def _ll(x: float, y: float) -> tuple[float, float]:
@@ -55,7 +89,7 @@ def _door(x0: float, y0: float, x1: float, y1: float) -> LineStringGeometry:
     return LineStringGeometry(coordinates=[_ll(x0, y0), _ll(x1, y1)])
 
 
-def build_document(tiles: PanoTiles) -> MapDocument:
+def build_document(tiles: dict[str, PanoTiles]) -> MapDocument:
     units = [
         Unit(
             id="u-corridor-1",
@@ -259,21 +293,14 @@ def build_document(tiles: PanoTiles) -> MapDocument:
     ]
     panos = [
         Pano(
-            id="pano-corridor-west",
-            level_id="l1",
-            position=_ll(10, 10),
-            heading_deg=0,
+            id=p.id,
+            level_id=p.level_id,
+            position=_ll(p.x, p.y),
+            heading_deg=p.heading,
             status=PanoStatus.READY,
-            tiles=tiles,
-        ),
-        Pano(
-            id="pano-corridor-east",
-            level_id="l1",
-            position=_ll(30, 10),
-            heading_deg=90,
-            status=PanoStatus.READY,
-            tiles=tiles,
-        ),
+            tiles=tiles[p.id],
+        )
+        for p in DEMO_PANOS
     ]
     connectors = [
         Connector(
@@ -367,15 +394,40 @@ def grid_panorama(width: int = 4096) -> np.ndarray:
     return img
 
 
-def main() -> None:
-    viewer_demo = ROOT / "apps" / "viewer" / "public" / "demo"
-    pano_dir = viewer_demo / "pano-grid"
-    with tempfile.TemporaryDirectory() as tmp:
-        source = Path(tmp) / "grid.png"
-        cv2.imwrite(str(source), grid_panorama())
-        levels = make_tiles(source, pano_dir, level_widths=(1024, 2048, 4096))
+def scene_source(scene: str) -> Path:
+    """The downloaded scene, fetched on first use."""
+    path = SCENES_DIR / f"{scene}.jpg"
+    if not path.exists():
+        SCENES_DIR.mkdir(parents=True, exist_ok=True)
+        print(f"downloading {scene} ...")
+        partial = path.with_suffix(".part")
+        urllib.request.urlretrieve(SCENE_URL.format(scene), partial)
+        partial.replace(path)
+    return path
 
-    tiles = PanoTiles(base_url=PANO_URL, preview_url=f"{PANO_URL}/preview.webp", levels=levels)
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--grid", action="store_true", help="synthetic grid in every panorama")
+    args = parser.parse_args()
+
+    viewer_demo = ROOT / "apps" / "viewer" / "public" / "demo"
+    for stale in viewer_demo.glob("pano-*"):
+        shutil.rmtree(stale)
+    tiles: dict[str, PanoTiles] = {}
+    with tempfile.TemporaryDirectory() as tmp:
+        grid = Path(tmp) / "grid.png"
+        if args.grid:
+            cv2.imwrite(str(grid), grid_panorama())
+        for pano in DEMO_PANOS:
+            source = grid if args.grid else scene_source(pano.scene)
+            url = pano_url(pano.id)
+            levels = make_tiles(source, viewer_demo / pano.id, level_widths=(1024, 2048, 4096))
+            tiles[pano.id] = PanoTiles(
+                base_url=url, preview_url=f"{url}/preview.webp", levels=levels
+            )
+            print(f"{pano.id}: {pano.scene if not args.grid else 'grid'}")
+
     document = build_document(tiles)
     payload = json.loads(document.model_dump_json(by_alias=True))
 

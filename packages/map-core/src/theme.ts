@@ -1,5 +1,11 @@
-import type { ExpressionSpecification, Map as MapLibreMap } from "maplibre-gl";
-import { UNIT_COLORS } from "./layers";
+import type { Map as MapLibreMap } from "maplibre-gl";
+import { landscapePaint } from "./landscape";
+import {
+  fixtureFillExpression,
+  openingColorExpression,
+  UNIT_COLORS,
+  unitFillExpression,
+} from "./layers";
 
 /** Dark counterparts of UNIT_COLORS: same hues, low lightness, so categories stay readable. */
 export const UNIT_COLORS_DARK: Record<string, string> = {
@@ -58,21 +64,28 @@ export const planPalette = (dark: boolean) => (dark ? DARK : LIGHT);
 /** Recolours the plan layers in place (no reload); layers that do not exist are skipped. */
 export function applyPlanTheme(map: MapLibreMap, dark: boolean) {
   const p = planPalette(dark);
-  const unitColor = [
-    "match",
-    ["get", "category"],
-    ...Object.entries(p.units).flat(),
-    p.unitFallback,
-  ] as unknown as ExpressionSpecification;
   type Paint = Parameters<MapLibreMap["setPaintProperty"]>;
   const set = (layer: string, prop: Paint[1], value: Paint[2]) => {
     if (map.getLayer(layer)) map.setPaintProperty(layer, prop, value);
   };
   set("background", "background-color", p.background);
-  set("units-fill", "fill-color", unitColor);
+  set("units-fill", "fill-color", unitFillExpression(p.units, p.unitFallback, dark));
   set("units-outline", "line-color", p.outline);
-  set("openings", "line-color", p.opening);
+  set("openings", "line-color", openingColorExpression(p.opening, dark));
+  // Zones and furniture (`detailLayers`), when the page shows them.
+  set("fixtures-fill", "fill-color", fixtureFillExpression(dark));
+  set("fixtures-outline", "line-color", dark ? "#64748b" : "#94a3b8");
+  set("zones-label", "text-color", dark ? "#fcd34d" : "#92400e");
+  set("fixtures-label", "text-color", dark ? "#cbd5e1" : "#475569");
+  for (const layer of ["zones-label", "fixtures-label"]) set(layer, "text-halo-color", p.halo);
   set("paths", "line-color", dark ? "#6b5d3f" : "#c8b68f");
+  const land = landscapePaint(dark);
+  set("landscape-lawn", "fill-color", land.lawn);
+  set("landscape-lawn-edge", "line-color", land.lawnEdge);
+  set("landscape-shadows", "fill-color", land.shadow);
+  set("landscape-crowns", "fill-color", land.crown);
+  set("landscape-crowns", "fill-outline-color", land.crownOutline);
+  set("landscape-3d", "fill-extrusion-color", land.solid);
   set("units-label", "text-color", p.unitLabel);
   for (const layer of ["units-label", "pois-label", "connectors-label", "route-marks-label"]) {
     set(layer, "text-halo-color", p.halo);
