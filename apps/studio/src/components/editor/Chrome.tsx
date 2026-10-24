@@ -532,7 +532,7 @@ export function Toolbar({ map, onUploadPlan }: { map: MapSummary; onUploadPlan: 
         value={poiCategory}
         options={Object.entries(POI_CATEGORIES).map(([id, c]) => ({
           id,
-          label: `${c.emoji} ${c.label}`,
+          label: c.label,
         }))}
         onChange={(v) => {
           setOptions({ poiCategory: v });
@@ -560,6 +560,8 @@ export function Toolbar({ map, onUploadPlan }: { map: MapSummary; onUploadPlan: 
       className={cn(
         panel,
         "pointer-events-auto flex max-w-full snap-x items-center overflow-x-auto p-1 [scrollbar-width:none]",
+        // Phones: the tools scroll sideways; faded edges show there is more on either side.
+        "max-lg:[mask-image:linear-gradient(to_right,transparent,black_14px,black_calc(100%-28px),transparent)]",
       )}
     >
       {tools.map((def) => (
@@ -760,7 +762,30 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
         <h2 id="help-title" className="text-xl font-semibold">
           Как быстро сделать карту
         </h2>
-        <ol className="list-decimal space-y-2 pl-5 text-sm">
+        {/* Phones: taps instead of hotkeys and hovering. */}
+        <ol className="list-decimal space-y-2 pl-5 text-sm lg:hidden">
+          <li>Инструменты — на нижней панели, она листается вбок.</li>
+          <li>Комната: два касания по противоположным углам.</li>
+          <li>Дверь, окно: коснитесь стены. Тип выбирается в стрелке рядом с инструментом.</li>
+          <li>Точка, мебель: касание — предмет на месте, можно ставить подряд.</li>
+          <li>
+            Изменить объект: инструмент «Выбор», коснитесь его — свойства откроются кнопкой
+            «Свойства».
+          </li>
+          <li>Ошиблись — стрелка «назад» внизу справа.</li>
+          <li>Ракета вверху — публикация. Если она бледная, нажмите: появится причина.</li>
+        </ol>
+        <div className="grid grid-cols-2 gap-2 text-sm lg:hidden">
+          {TOOLS.map((t) => (
+            <div key={t.id} className="flex items-center gap-2">
+              <span className="[&>svg]:size-4" aria-hidden>
+                {t.icon}
+              </span>
+              {t.label}
+            </div>
+          ))}
+        </div>
+        <ol className="hidden list-decimal space-y-2 pl-5 text-sm lg:block">
           <li>
             Есть схема здания? Загрузите её кнопкой с картинкой на панели — она ляжет подложкой.
           </li>
@@ -777,7 +802,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <li>«Панорама» (0): клик в месте съёмки, отсканируйте QR телефоном и снимайте.</li>
           <li>«Опубликовать» — посетители увидят карту по постоянной ссылке.</li>
         </ol>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+        <div className="hidden grid-cols-2 gap-x-6 gap-y-1 text-sm lg:grid">
           {TOOLS.map((t) => (
             <div key={t.id} className="flex justify-between">
               <span>{t.label}</span>

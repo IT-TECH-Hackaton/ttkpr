@@ -1,5 +1,5 @@
 import type { Level, Poi } from "@ttkpr/api-client";
-import { categoryEmoji, categoryLabel, type Endpoint, type MapBundle } from "@ttkpr/map-core";
+import { categoryLabel, type Endpoint, type MapBundle } from "@ttkpr/map-core";
 import { ArrowLeft, Crosshair, LocateFixed } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import type { End } from "../lib/routing";
@@ -102,7 +102,11 @@ export function EndpointPicker({
           {pois.map((poi) => (
             <Option
               key={poi.id}
-              icon={<span className="text-lg">{categoryEmoji(poi.category)}</span>}
+              icon={
+                <span className="text-lg">
+                  <span className="inline-block size-2.5 rounded-full bg-accent" />
+                </span>
+              }
               title={poi.name}
               subtitle={`${categoryLabel(poi.category)} · ${levelName(poi.levelId)}`}
               onClick={() => onPick({ poiId: poi.id })}

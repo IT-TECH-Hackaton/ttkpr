@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AcceptInviteData, AcceptInviteErrors, AcceptInviteResponses, AddMemberData, AddMemberErrors, AddMemberResponses, ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ClearLiveStatusData, ClearLiveStatusErrors, ClearLiveStatusResponses, CreateCaptureData, CreateCaptureErrors, CreateCaptureResponses, CreateCaptureTokenData, CreateCaptureTokenErrors, CreateCaptureTokenResponses, CreateInviteData, CreateInviteErrors, CreateInviteResponses, CreateMapData, CreateMapErrors, CreateMapResponses, CreatePlanImportData, CreatePlanImportErrors, CreatePlanImportResponses, CreateScanData, CreateScanErrors, CreateScanResponses, DeleteMapData, DeleteMapErrors, DeleteMapResponses, DeletePanoramaData, DeletePanoramaErrors, DeletePanoramaResponses, DeleteScanData, DeleteScanErrors, DeleteScanResponses, GetBundleData, GetBundleErrors, GetBundleResponses, GetDraftData, GetDraftErrors, GetDraftResponses, GetLiveData, GetLiveErrors, GetLiveResponses, GetManifestData, GetManifestErrors, GetManifestResponses, GetMapData, GetMapErrors, GetMapResponses, GetPanoramaData, GetPanoramaErrors, GetPanoramaResponses, GetPlanImportData, GetPlanImportErrors, GetPlanImportResponses, GetScanData, GetScanErrors, GetScanResponses, HealthData, HealthResponses, ListLiveData, ListLiveErrors, ListLiveResponses, ListMapsData, ListMapsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListPanoramasData, ListPanoramasErrors, ListPanoramasResponses, ListScansData, ListScansErrors, ListScansResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutEverywhereData, LogoutEverywhereResponses, LogoutResponses, MapStatsData, MapStatsErrors, MapStatsResponses, MeData, MeResponses, PublishData, PublishErrors, PublishResponses, RecordEventsData, RecordEventsErrors, RecordEventsResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, SaveDraftData, SaveDraftErrors, SaveDraftResponses, SetLiveStatusData, SetLiveStatusErrors, SetLiveStatusResponses, StartStitchingData, StartStitchingErrors, StartStitchingResponses, UpdateMapData, UpdateMapErrors, UpdateMapResponses, UpdateMemberData, UpdateMemberErrors, UpdateMemberResponses, UpdatePanoramaData, UpdatePanoramaErrors, UpdatePanoramaResponses, UpdateProfileData, UpdateProfileErrors, UpdateProfileResponses, UploadAssetData, UploadAssetErrors, UploadAssetResponses, UploadFrameData, UploadFrameErrors, UploadFrameResponses, UploadPanoramaData, UploadPanoramaErrors, UploadPanoramaResponses, UploadPanoramaVideoData, UploadPanoramaVideoErrors, UploadPanoramaVideoResponses } from './types.gen';
+import type { AcceptInviteData, AcceptInviteErrors, AcceptInviteResponses, AddMemberData, AddMemberErrors, AddMemberResponses, ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ClearLiveStatusData, ClearLiveStatusErrors, ClearLiveStatusResponses, CreateCaptureData, CreateCaptureErrors, CreateCaptureResponses, CreateCaptureTokenData, CreateCaptureTokenErrors, CreateCaptureTokenResponses, CreateInviteData, CreateInviteErrors, CreateInviteResponses, CreateMapData, CreateMapErrors, CreateMapResponses, CreatePlanImportData, CreatePlanImportErrors, CreatePlanImportResponses, CreateScanData, CreateScanErrors, CreateScanResponses, DeleteMapData, DeleteMapErrors, DeleteMapResponses, DeletePanoramaData, DeletePanoramaErrors, DeletePanoramaResponses, DeleteScanData, DeleteScanErrors, DeleteScanResponses, GetBundleData, GetBundleErrors, GetBundleResponses, GetChatData, GetChatErrors, GetChatResponses, GetDraftData, GetDraftErrors, GetDraftResponses, GetLiveData, GetLiveErrors, GetLiveResponses, GetManifestData, GetManifestErrors, GetManifestResponses, GetMapData, GetMapErrors, GetMapResponses, GetPanoramaData, GetPanoramaErrors, GetPanoramaResponses, GetPlanImportData, GetPlanImportErrors, GetPlanImportResponses, GetScanData, GetScanErrors, GetScanResponses, HealthData, HealthResponses, ListChatData, ListChatErrors, ListChatResponses, ListLiveData, ListLiveErrors, ListLiveResponses, ListMapsData, ListMapsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListPanoramasData, ListPanoramasErrors, ListPanoramasResponses, ListScansData, ListScansErrors, ListScansResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutEverywhereData, LogoutEverywhereResponses, LogoutResponses, MapStatsData, MapStatsErrors, MapStatsResponses, MeData, MeResponses, PostChatData, PostChatErrors, PostChatResponses, PublishData, PublishErrors, PublishResponses, RecordEventsData, RecordEventsErrors, RecordEventsResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, ReplyChatData, ReplyChatErrors, ReplyChatResponses, SaveDraftData, SaveDraftErrors, SaveDraftResponses, SetLiveStatusData, SetLiveStatusErrors, SetLiveStatusResponses, StartStitchingData, StartStitchingErrors, StartStitchingResponses, UpdateMapData, UpdateMapErrors, UpdateMapResponses, UpdateMemberData, UpdateMemberErrors, UpdateMemberResponses, UpdatePanoramaData, UpdatePanoramaErrors, UpdatePanoramaResponses, UpdateProfileData, UpdateProfileErrors, UpdateProfileResponses, UploadAssetData, UploadAssetErrors, UploadAssetResponses, UploadFrameData, UploadFrameErrors, UploadFrameResponses, UploadPanoramaData, UploadPanoramaErrors, UploadPanoramaResponses, UploadPanoramaVideoData, UploadPanoramaVideoErrors, UploadPanoramaVideoResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -445,3 +445,45 @@ export const recordEvents = <ThrowOnError extends boolean = false>(options: Opti
  * Map Stats
  */
 export const mapStats = <ThrowOnError extends boolean = false>(options: Options<MapStatsData, ThrowOnError>): RequestResult<MapStatsResponses, MapStatsErrors, ThrowOnError> => (options.client ?? client).get<MapStatsResponses, MapStatsErrors, ThrowOnError>({ url: '/api/maps/{map_id}/stats', ...options });
+
+/**
+ * Post Chat
+ *
+ * A visitor's question; without `thread` a new conversation starts.
+ */
+export const postChat = <ThrowOnError extends boolean = false>(options: Options<PostChatData, ThrowOnError>): RequestResult<PostChatResponses, PostChatErrors, ThrowOnError> => (options.client ?? client).post<PostChatResponses, PostChatErrors, ThrowOnError>({
+    url: '/api/public/maps/{slug}/chat',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Chat
+ *
+ * The visitor's conversation, polled while the chat is open.
+ */
+export const getChat = <ThrowOnError extends boolean = false>(options: Options<GetChatData, ThrowOnError>): RequestResult<GetChatResponses, GetChatErrors, ThrowOnError> => (options.client ?? client).get<GetChatResponses, GetChatErrors, ThrowOnError>({ url: '/api/public/maps/{slug}/chat/{thread}', ...options });
+
+/**
+ * List Chat
+ *
+ * Conversations with visitors, the most recent first.
+ */
+export const listChat = <ThrowOnError extends boolean = false>(options: Options<ListChatData, ThrowOnError>): RequestResult<ListChatResponses, ListChatErrors, ThrowOnError> => (options.client ?? client).get<ListChatResponses, ListChatErrors, ThrowOnError>({ url: '/api/maps/{map_id}/chat', ...options });
+
+/**
+ * Reply Chat
+ *
+ * The team's answer; the visitor sees it on the next poll.
+ */
+export const replyChat = <ThrowOnError extends boolean = false>(options: Options<ReplyChatData, ThrowOnError>): RequestResult<ReplyChatResponses, ReplyChatErrors, ThrowOnError> => (options.client ?? client).post<ReplyChatResponses, ReplyChatErrors, ThrowOnError>({
+    url: '/api/maps/{map_id}/chat/{thread}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});

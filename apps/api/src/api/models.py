@@ -252,3 +252,18 @@ class PlanImport(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
     )
+
+
+class ChatMessage(Base):
+    """A visitor's question to the organizers, or their answer. A thread is one visitor's
+    conversation; its id lives only on the visitor's device and works as the key to read it."""
+
+    __tablename__ = "chat_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    map_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("maps.id", ondelete="CASCADE"), index=True)
+    thread: Mapped[uuid.UUID] = mapped_column(index=True)
+    author: Mapped[str] = mapped_column(String(16))  # visitor | organizer
+    name: Mapped[str | None] = mapped_column(String(60), default=None)
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

@@ -15,8 +15,9 @@ import {
   unitAt,
 } from "@ttkpr/map-core";
 import { Button, cn, ThemeSwitch, useTheme } from "@ttkpr/ui";
-import { Box, CircleHelp, Minus, Plus, Trees } from "lucide-react";
+import { Box, CircleHelp, MessageCircle, Minus, Plus, Trees } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { ChatPanel } from "../components/ChatPanel";
 import { Legend } from "../components/Legend";
 import { LevelSwitcher } from "../components/LevelSwitcher";
 import { OfflineControl } from "../components/OfflineControl";
@@ -97,6 +98,7 @@ export function MapScreen() {
   const [threeD, setThreeD] = useState(false);
   const [nature, setNature] = useStoredFlag("ttkpr.nature", true);
   const [roomId, setRoomId] = useState<string | null>(null);
+  const [chat, setChat] = useState(false);
   // The legend opens by itself the first time a visitor sees a map on this device.
   const [legendSeen, setLegendSeen] = useStoredFlag("ttkpr.legend.seen", false);
   const [legend, setLegend] = useState(!legendSeen);
@@ -459,6 +461,13 @@ export function MapScreen() {
       onClose={() => setSearch({ poi: undefined })}
       venueExtra={
         <div className="space-y-2">
+          {/* The built-in demo is static files: no organizers to write to. */}
+          {slug !== "demo" && (
+            <Button variant="secondary" className="w-full" onClick={() => setChat(true)}>
+              <MessageCircle className="size-4" aria-hidden />
+              Вопрос организаторам
+            </Button>
+          )}
           <OfflineControl slug={slug} version={manifest.version} />
           <ThemeSwitch />
         </div>
@@ -565,7 +574,8 @@ export function MapScreen() {
         </Suspense>
       )}
 
-      {legend && !pano && <Legend onClose={closeLegend} />}
+      {chat && <ChatPanel slug={slug} onClose={() => setChat(false)} />}
+      {legend && !pano && <Legend intro={!legendSeen} onClose={closeLegend} />}
       {dollhouse && (
         <Suspense fallback={<div className="fixed inset-0 z-30 bg-bg" />}>
           <Dollhouse

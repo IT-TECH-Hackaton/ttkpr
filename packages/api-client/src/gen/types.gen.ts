@@ -187,6 +187,78 @@ export type CaptureTokenOut = {
 };
 
 /**
+ * ChatMessageOut
+ */
+export type ChatMessageOut = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Author
+     *
+     * visitor | organizer
+     */
+    author: string;
+    /**
+     * Name
+     */
+    name: string | null;
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Createdat
+     */
+    createdAt: string;
+};
+
+/**
+ * ChatPost
+ *
+ * A visitor's message: a new thread, or `thread` from the visitor's device.
+ */
+export type ChatPost = {
+    /**
+     * Thread
+     */
+    thread?: string | null;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
+ * ChatReply
+ */
+export type ChatReply = {
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
+ * ChatThreadOut
+ */
+export type ChatThreadOut = {
+    /**
+     * Thread
+     */
+    thread: string;
+    /**
+     * Messages
+     */
+    messages: Array<ChatMessageOut>;
+};
+
+/**
  * Connector
  */
 export type Connector = {
@@ -3098,3 +3170,133 @@ export type MapStatsResponses = {
 };
 
 export type MapStatsResponse = MapStatsResponses[keyof MapStatsResponses];
+
+export type PostChatData = {
+    body: ChatPost;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/public/maps/{slug}/chat';
+};
+
+export type PostChatErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PostChatError = PostChatErrors[keyof PostChatErrors];
+
+export type PostChatResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChatThreadOut;
+};
+
+export type PostChatResponse = PostChatResponses[keyof PostChatResponses];
+
+export type GetChatData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+        /**
+         * Thread
+         */
+        thread: string;
+    };
+    query?: never;
+    url: '/api/public/maps/{slug}/chat/{thread}';
+};
+
+export type GetChatErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChatError = GetChatErrors[keyof GetChatErrors];
+
+export type GetChatResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChatThreadOut;
+};
+
+export type GetChatResponse = GetChatResponses[keyof GetChatResponses];
+
+export type ListChatData = {
+    body?: never;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/chat';
+};
+
+export type ListChatErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListChatError = ListChatErrors[keyof ListChatErrors];
+
+export type ListChatResponses = {
+    /**
+     * Response List Chat
+     *
+     * Successful Response
+     */
+    200: Array<ChatThreadOut>;
+};
+
+export type ListChatResponse = ListChatResponses[keyof ListChatResponses];
+
+export type ReplyChatData = {
+    body: ChatReply;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+        /**
+         * Thread
+         */
+        thread: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/chat/{thread}';
+};
+
+export type ReplyChatErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReplyChatError = ReplyChatErrors[keyof ReplyChatErrors];
+
+export type ReplyChatResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChatThreadOut;
+};
+
+export type ReplyChatResponse = ReplyChatResponses[keyof ReplyChatResponses];

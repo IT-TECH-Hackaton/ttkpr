@@ -302,3 +302,30 @@ class PlanImportOut(CamelModel):
         " Coordinates are fractions of the page image (x right, y down)."
     )
     created_at: datetime
+
+
+class ChatPost(CamelModel):
+    """A visitor's message: a new thread, or `thread` from the visitor's device."""
+
+    thread: uuid.UUID | None = None
+    name: str | None = Field(None, max_length=60)
+    text: str = Field(min_length=1, max_length=1000)
+
+
+class ChatReply(CamelModel):
+    text: str = Field(min_length=1, max_length=1000)
+
+
+class ChatMessageOut(CamelModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    author: str = Field(description="visitor | organizer")
+    name: str | None
+    text: str
+    created_at: datetime
+
+
+class ChatThreadOut(CamelModel):
+    thread: uuid.UUID
+    messages: list[ChatMessageOut]

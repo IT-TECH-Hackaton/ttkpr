@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { getDraft, getMap, type MapSummary, publish, updateMap } from "@ttkpr/api-client";
-import { categoryEmoji, SLUG_RE, slugify } from "@ttkpr/map-core";
+import { SLUG_RE, slugify } from "@ttkpr/map-core";
 import { Button, cn } from "@ttkpr/ui";
 import { useEffect, useState } from "react";
 import { AppShell } from "../components/AppShell";
@@ -256,9 +256,7 @@ export function ShareScreen({ mapId }: { mapId: string }) {
                   className="mx-auto"
                   label={`QR-код точки ${poi.name}`}
                 />
-                <p className="font-medium">
-                  {categoryEmoji(poi.category)} {poi.name}
-                </p>
+                <p className="font-medium">{poi.name}</p>
                 <p className="text-xs text-muted">Вы здесь · сканируйте, чтобы найти дорогу</p>
               </li>
             ))}

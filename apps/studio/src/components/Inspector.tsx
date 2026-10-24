@@ -30,6 +30,7 @@ import { usePanoramaActions } from "../lib/panos";
 import { scalePoint } from "../lib/scalePlan";
 import { useDraft } from "../store";
 import { CaptureQrDialog } from "./CaptureQrDialog";
+import { ChatInbox } from "./ChatInbox";
 import { PlanImportDialog } from "./PlanImportDialog";
 import { RoomIconField } from "./RoomIconField";
 import { RouteCheck } from "./RouteCheck";
@@ -142,7 +143,7 @@ export function Inspector({
         <DeleteButton id={opening.id} />
       </Section>
     );
-  } else content = <OverviewPanel panos={panos} mapId={mapId} />;
+  } else content = <OverviewPanel panos={panos} mapId={mapId} canEdit={canEdit} />;
 
   // Roles without the edit right see the same panels, read-only (panoramas manage themselves).
   return (
@@ -311,8 +312,7 @@ function RoomSize({
         </Button>
       )}
       <p className="text-xs text-muted">
-        Если маршрут показывает слишком много минут, план нарисован не в масштабе: измерьте длинную
-        сторону одной комнаты и введите её — весь план подстроится. Отменить — Ctrl+Z.
+        Время маршрута неверное? Введите реальную длину комнаты — план пересчитается.
       </p>
     </div>
   );
@@ -363,9 +363,9 @@ function PoiPanel({ id }: { id: string }) {
           value={poi.category}
           onChange={(e) => updatePoi(poi.id, { category: e.target.value })}
         >
-          {Object.entries(POI_CATEGORIES).map(([key, { emoji, label }]) => (
+          {Object.entries(POI_CATEGORIES).map(([key, { label }]) => (
             <option key={key} value={key}>
-              {emoji} {label}
+              {label}
             </option>
           ))}
         </select>
@@ -640,7 +640,15 @@ function PanoSpotPanel({ mapId, spot }: { mapId: string; spot: [number, number] 
   );
 }
 
-function OverviewPanel({ panos, mapId }: { panos: PanoramaOut[]; mapId: string }) {
+function OverviewPanel({
+  panos,
+  mapId,
+  canEdit,
+}: {
+  panos: PanoramaOut[];
+  mapId: string;
+  canEdit: boolean;
+}) {
   const [importing, setImporting] = useState(false);
   const doc = useDraft((s) => s.doc);
   const levelId = useDraft((s) => s.levelId);
@@ -667,6 +675,10 @@ function OverviewPanel({ panos, mapId }: { panos: PanoramaOut[]; mapId: string }
             {plural(on(panos).length, ["панорама", "панорамы", "панорам"])}
           </li>
         </ul>
+      </Section>
+
+      <Section title="Вопросы гостей">
+        <ChatInbox mapId={mapId} canReply={canEdit} />
       </Section>
 
       <Section title="Маршруты">

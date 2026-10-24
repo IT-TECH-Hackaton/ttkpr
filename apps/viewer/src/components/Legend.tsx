@@ -1,6 +1,25 @@
 import { UNIT_COLORS } from "@ttkpr/map-core";
 import { Button } from "@ttkpr/ui";
-import { useId } from "react";
+import { MapPinned, Navigation, View } from "lucide-react";
+import { type ReactNode, useId, useState } from "react";
+
+const INTRO: { icon: ReactNode; title: string; text: string }[] = [
+  {
+    icon: <MapPinned className="size-7" aria-hidden />,
+    title: "Найдите место",
+    text: "Поиск сверху или нажмите на комнату на плане — внизу откроется её карточка.",
+  },
+  {
+    icon: <Navigation className="size-7" aria-hidden />,
+    title: "Постройте маршрут",
+    text: "«Маршрут сюда» в карточке. Без лестниц — кнопка «Без ступенек», старт с QR на стене — «Вы здесь».",
+  },
+  {
+    icon: <View className="size-7" aria-hidden />,
+    title: "Осмотритесь заранее",
+    text: "Панорамы 360° из карточки комнаты и вдоль маршрута, 3D-вид и этажи — кнопками справа.",
+  },
+];
 
 const DOTS = [
   { color: "#2563eb", label: "Место: стенд, кафе, регистрация — нажмите, чтобы открыть" },
@@ -27,8 +46,11 @@ const LINES = [
 ];
 
 /** What the marks on the plan mean: opened by "?" and once on the first visit. */
-export function Legend({ onClose }: { onClose: () => void }) {
+export function Legend({ onClose, intro = false }: { onClose: () => void; intro?: boolean }) {
   const titleId = useId();
+  // First visit: three short steps, then the legend itself.
+  const [step, setStep] = useState(intro ? 0 : INTRO.length);
+  const current = INTRO[step];
   return (
     <div
       role="dialog"
@@ -45,48 +67,77 @@ export function Legend({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
-        <h2 id={titleId} className="text-lg font-semibold">
-          Обозначения на карте
-        </h2>
-        <ul className="space-y-2.5 text-sm">
-          {DOTS.map((d) => (
-            <li key={d.label} className="flex items-center gap-3">
-              <span
-                className="size-4 shrink-0 rounded-full border-2 border-white shadow"
-                style={{ background: d.color }}
-                aria-hidden
-              />
-              {d.label}
-            </li>
-          ))}
-        </ul>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          {AREAS.map((a) => (
-            <div key={a.label} className="flex items-center gap-2">
-              <span
-                className="h-4 w-6 shrink-0 rounded border border-[#5b6577]"
-                style={{ background: a.color }}
-                aria-hidden
-              />
-              {a.label}
+        {current ? (
+          <div className="space-y-4">
+            <div className="grid size-14 place-items-center rounded-2xl bg-accent text-accent-fg">
+              {current.icon}
             </div>
-          ))}
-        </div>
-        <ul className="space-y-2.5 text-sm">
-          {LINES.map((l) => (
-            <li key={l.label} className="flex items-center gap-3">
-              <span className={`w-6 shrink-0 ${l.style}`} aria-hidden />
-              {l.label}
-            </li>
-          ))}
-        </ul>
-        <p className="text-sm text-muted">
-          Нажмите на комнату или место — внизу откроется карточка с панорамой и маршрутом. 3D —
-          объёмный вид этажа, кубик — макет по фотографиям, деревья — показать или скрыть природу.
-        </p>
-        <Button className="w-full" onClick={onClose}>
-          Понятно
-        </Button>
+            <h2 id={titleId} className="text-xl font-semibold">
+              {current.title}
+            </h2>
+            <p className="leading-relaxed text-muted">{current.text}</p>
+            <div className="flex items-center gap-2">
+              {INTRO.map((item, i) => (
+                <span
+                  key={item.title}
+                  className={
+                    i === step ? "h-2 w-6 rounded-full bg-accent" : "size-2 rounded-full bg-border"
+                  }
+                  aria-hidden
+                />
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={onClose}>
+                Пропустить
+              </Button>
+              <Button className="flex-1" onClick={() => setStep(step + 1)}>
+                Дальше
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <h2 id={titleId} className="text-lg font-semibold">
+              Обозначения на карте
+            </h2>
+            <ul className="space-y-2.5 text-sm">
+              {DOTS.map((d) => (
+                <li key={d.label} className="flex items-center gap-3">
+                  <span
+                    className="size-4 shrink-0 rounded-full border-2 border-white shadow"
+                    style={{ background: d.color }}
+                    aria-hidden
+                  />
+                  {d.label}
+                </li>
+              ))}
+            </ul>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              {AREAS.map((a) => (
+                <div key={a.label} className="flex items-center gap-2">
+                  <span
+                    className="h-4 w-6 shrink-0 rounded border border-[#5b6577]"
+                    style={{ background: a.color }}
+                    aria-hidden
+                  />
+                  {a.label}
+                </div>
+              ))}
+            </div>
+            <ul className="space-y-2.5 text-sm">
+              {LINES.map((l) => (
+                <li key={l.label} className="flex items-center gap-3">
+                  <span className={`w-6 shrink-0 ${l.style}`} aria-hidden />
+                  {l.label}
+                </li>
+              ))}
+            </ul>
+            <Button className="w-full" onClick={onClose}>
+              Понятно
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );

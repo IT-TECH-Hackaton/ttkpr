@@ -1,5 +1,5 @@
 import type { Level, Poi } from "@ttkpr/api-client";
-import { categoryEmoji, categoryLabel } from "@ttkpr/map-core";
+import { categoryLabel } from "@ttkpr/map-core";
 import { useEffect, useRef, useState } from "react";
 
 interface Props {
@@ -48,7 +48,9 @@ export function SearchBar({ search, levels, onPick, onQuery }: Props) {
                 }}
                 className="flex min-h-12 w-full items-center gap-3 px-4 text-left"
               >
-                <span aria-hidden>{categoryEmoji(poi.category)}</span>
+                <span aria-hidden>
+                  <span className="inline-block size-2.5 rounded-full bg-accent" />
+                </span>
                 <span className="flex-1">
                   <span className="block font-medium">{poi.name}</span>
                   <span className="block text-sm text-muted">

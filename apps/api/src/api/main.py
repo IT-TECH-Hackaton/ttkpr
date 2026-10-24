@@ -6,6 +6,7 @@ from api.config import get_settings
 from api.middleware import BodyLimit, OriginCheck
 from api.routers import (
     auth,
+    chat,
     health,
     live,
     maps,
@@ -60,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(live.router)
     app.include_router(public.router)
     app.include_router(stats.router)
+    app.include_router(chat.router)
     app.include_router(media.router)
     return app
 

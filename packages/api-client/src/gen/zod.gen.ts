@@ -124,6 +124,43 @@ export const zCaptureTokenOut = z.object({
 });
 
 /**
+ * ChatMessageOut
+ */
+export const zChatMessageOut = z.object({
+    id: z.uuid(),
+    author: z.string(),
+    name: z.string().nullable(),
+    text: z.string(),
+    createdAt: z.iso.datetime()
+});
+
+/**
+ * ChatPost
+ *
+ * A visitor's message: a new thread, or `thread` from the visitor's device.
+ */
+export const zChatPost = z.object({
+    thread: z.uuid().nullish(),
+    name: z.string().max(60).nullish(),
+    text: z.string().min(1).max(1000)
+});
+
+/**
+ * ChatReply
+ */
+export const zChatReply = z.object({
+    text: z.string().min(1).max(1000)
+});
+
+/**
+ * ChatThreadOut
+ */
+export const zChatThreadOut = z.object({
+    thread: z.uuid(),
+    messages: z.array(zChatMessageOut)
+});
+
+/**
  * ConnectorKind
  */
 export const zConnectorKind = z.enum([
@@ -1343,3 +1380,47 @@ export const zMapStatsQuery = z.object({
  * Successful Response
  */
 export const zMapStatsResponse = zStatsOut;
+
+export const zPostChatBody = zChatPost;
+
+export const zPostChatPath = z.object({
+    slug: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zPostChatResponse = zChatThreadOut;
+
+export const zGetChatPath = z.object({
+    slug: z.string(),
+    thread: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zGetChatResponse = zChatThreadOut;
+
+export const zListChatPath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Response List Chat
+ *
+ * Successful Response
+ */
+export const zListChatResponse = z.array(zChatThreadOut);
+
+export const zReplyChatBody = zChatReply;
+
+export const zReplyChatPath = z.object({
+    map_id: z.uuid(),
+    thread: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zReplyChatResponse = zChatThreadOut;

@@ -1,6 +1,5 @@
 import type { Level, Poi, Unit } from "@ttkpr/api-client";
 import {
-  categoryEmoji,
   categoryLabel,
   type MapBundle,
   plural,
@@ -128,7 +127,7 @@ function PlaceContent({
       <section aria-label={poi.name} className="space-y-3">
         <div className="flex items-start gap-3">
           <span className="text-2xl" aria-hidden>
-            {categoryEmoji(poi.category)}
+            <span className="inline-block size-2.5 rounded-full bg-accent" />
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="text-xl font-semibold leading-tight">{poi.name}</h2>
@@ -228,7 +227,9 @@ function PlaceContent({
                   onClick={() => onPickPoi(p)}
                   className="flex min-h-12 w-full items-center gap-3 text-left"
                 >
-                  <span aria-hidden>{categoryEmoji(p.category)}</span>
+                  <span aria-hidden>
+                    <span className="inline-block size-2.5 rounded-full bg-accent" />
+                  </span>
                   <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
                   <span className="shrink-0 text-sm text-muted">{categoryLabel(p.category)}</span>
                 </button>
@@ -288,7 +289,9 @@ function PlaceContent({
               onClick={() => onPickPoi(p)}
               className="flex min-h-12 w-full items-center gap-3 text-left"
             >
-              <span aria-hidden>{categoryEmoji(p.category)}</span>
+              <span aria-hidden>
+                <span className="inline-block size-2.5 rounded-full bg-accent" />
+              </span>
               <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
               <span className="shrink-0 text-sm text-muted">{categoryLabel(p.category)}</span>
             </button>

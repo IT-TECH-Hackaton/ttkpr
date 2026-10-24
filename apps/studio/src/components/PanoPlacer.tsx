@@ -13,7 +13,6 @@ import {
 import { type MarkerConfig, MarkersPlugin } from "@photo-sphere-viewer/markers-plugin";
 import type { PanoramaOut } from "@ttkpr/api-client";
 import {
-  categoryEmoji,
   floorPointFromPano,
   fromLocal,
   type MapBundle,
@@ -47,11 +46,10 @@ function markers(doc: MapBundle, pano: PanoramaOut): MarkerConfig[] {
   return panoTargets({ ...doc, panos: [] }, asPano)
     .filter((t) => t.kind === "poi")
     .map((t) => {
-      const poi = doc.pois?.find((p) => p.id === t.id);
       return {
         id: t.id,
         position: { yaw: toRad(t.yaw), pitch: toRad(t.pitch) },
-        html: `<span class="pano-pin">${categoryEmoji(poi?.category ?? "other")} ${escapeHtml(t.label)}</span>`,
+        html: `<span class="pano-pin">${escapeHtml(t.label)}</span>`,
         anchor: "bottom center",
       };
     });
@@ -61,7 +59,6 @@ export default function PanoPlacer({ pano, onClose }: { pano: PanoramaOut; onClo
   const hostRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Viewer | null>(null);
   const [hint, setHint] = useState("Кликните по полу у основания объекта — там появится точка");
-  const category = useDraft((s) => s.poiCategory);
   const doc = useDraft((s) => s.doc);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: the viewer is created once per panorama
@@ -123,8 +120,9 @@ export default function PanoPlacer({ pano, onClose }: { pano: PanoramaOut; onClo
         <p className="pointer-events-auto flex-1 rounded-2xl bg-slate-900/85 px-4 py-3 text-sm text-white shadow-xl backdrop-blur">
           {hint}
           <span className="mt-1 block text-xs text-white/60">
-            Категория новых точек: {categoryEmoji(category)} — меняется в панели инструментов. Если
-            подписи смещены по кругу, поправьте «Направление» панорамы.
+            Категория новых точек: <span className="inline-block size-2.5 rounded-full bg-accent" />{" "}
+            — меняется в панели инструментов. Если подписи смещены по кругу, поправьте «Направление»
+            панорамы.
           </span>
         </p>
         <Button

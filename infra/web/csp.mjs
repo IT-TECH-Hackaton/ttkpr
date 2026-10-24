@@ -31,12 +31,13 @@ function policy(hashes, frameAncestors) {
     ["script-src 'self'", ...hashes].join(" "),
     // Inline styles: MapLibre, Photo Sphere Viewer and React set them at runtime.
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    // Room icons are picked from Iconify in the studio (preview images and the SVG itself).
+    "img-src 'self' data: blob: https://api.iconify.design",
     // Recorded capture videos are previewed from blob: URLs.
     "media-src 'self' blob:",
     "worker-src 'self' blob:",
     // Map glyphs (fonts) come from protomaps; everything else is same-origin.
-    "connect-src 'self' https://protomaps.github.io",
+    "connect-src 'self' https://protomaps.github.io https://api.iconify.design",
     "font-src 'self' data:",
     "object-src 'none'",
     "base-uri 'self'",
