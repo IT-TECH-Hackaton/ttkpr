@@ -406,9 +406,16 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
         case "pano":
           s.setPanoSpot(at);
           return;
-        case "poi":
-          s.addPoi(at);
+        case "poi": {
+          // A tap on an existing point selects it for editing instead of stacking a new one.
+          const hit = map.queryRenderedFeatures(event.point, { layers: ["pois-hit"] })[0];
+          const poiId = hit?.properties?.id as string | undefined;
+          if (poiId) {
+            s.setTool("select");
+            s.select(poiId);
+          } else s.addPoi(at);
           return;
+        }
         case "furniture":
           s.addFurniture(at, planRotation());
           return;

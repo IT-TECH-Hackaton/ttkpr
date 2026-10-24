@@ -1,5 +1,13 @@
 import { cn } from "@ttkpr/ui";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 
 interface Props {
   trigger: (props: { open: boolean; toggle: () => void }) => ReactNode;
@@ -9,14 +17,35 @@ interface Props {
   className?: string;
 }
 
-/** Small dropdown: closes on outside click and Escape. */
+/**
+ * Small dropdown: closes on outside click and Escape. The menu is portalled to <body> and placed
+ * next to its button: the bottom toolbar scrolls sideways and is blurred, which would clip a menu
+ * inside it (on a phone it could not be tapped at all).
+ */
 export function Popover({ trigger, children, align = "left", side = "bottom", className }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const [place, setPlace] = useState<CSSProperties>({});
+  useLayoutEffect(() => {
+    if (!open || !ref.current) return;
+    const r = ref.current.getBoundingClientRect();
+    const gap = 8;
+    setPlace({
+      position: "fixed",
+      ...(side === "bottom"
+        ? { top: r.bottom + gap }
+        : { bottom: window.innerHeight - r.top + gap }),
+      ...(align === "right"
+        ? { right: Math.max(8, window.innerWidth - r.right) }
+        : { left: Math.max(8, Math.min(r.left, window.innerWidth - 232)) }),
+    });
+  }, [open, align, side]);
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (!ref.current?.contains(target) && !menu.current?.contains(target)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -31,18 +60,20 @@ export function Popover({ trigger, children, align = "left", side = "bottom", cl
   return (
     <div ref={ref} className="relative">
       {trigger({ open, toggle: () => setOpen((v) => !v) })}
-      {open && (
-        <div
-          className={cn(
-            "absolute z-40 min-w-56 rounded-2xl border border-border bg-bg p-1.5 text-fg shadow-xl",
-            align === "right" ? "right-0" : "left-0",
-            side === "bottom" ? "top-full mt-2" : "bottom-full mb-2",
-            className,
-          )}
-        >
-          {children(() => setOpen(false))}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            ref={menu}
+            style={place}
+            className={cn(
+              "pointer-events-auto z-[60] max-h-[70dvh] min-w-56 overflow-y-auto rounded-2xl border border-border bg-bg p-1.5 text-fg shadow-xl",
+              className,
+            )}
+          >
+            {children(() => setOpen(false))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

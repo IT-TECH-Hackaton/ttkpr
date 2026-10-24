@@ -140,6 +140,14 @@ const DOOR_TYPES: { id: DoorType; label: string }[] = [
   { id: "window", label: "Окно 1,2 м" },
 ];
 
+const PUBLISH_BLOCKED: Record<Exclude<SaveState, "saved">, string> = {
+  dirty: "изменения ещё сохраняются, подождите пару секунд",
+  saving: "изменения ещё сохраняются, подождите пару секунд",
+  offline: "нет интернета — изменения сохранятся, когда сеть вернётся",
+  conflict: "карту изменили в другой вкладке или на другом устройстве — обновите страницу",
+  error: "последнее сохранение не прошло — проверьте ошибку вверху и попробуйте ещё раз",
+};
+
 const SAVE: Record<SaveState, { label: string; icon: ReactNode; tone: string }> = {
   saved: { label: "Сохранено", icon: <Check />, tone: "text-emerald-300" },
   dirty: {
@@ -374,12 +382,19 @@ export function TopRight({
       {can(map, "publish") && (
         <button
           type="button"
-          onClick={onPublish}
-          disabled={publishing || saveState !== "saved"}
+          onClick={() => {
+            // On a phone there is no tooltip: say why publishing has to wait instead of a dead button.
+            if (saveState === "saved") return onPublish();
+            useDraft.getState().setHint(`Опубликовать пока нельзя: ${PUBLISH_BLOCKED[saveState]}`);
+          }}
+          disabled={publishing}
           title={
-            saveState !== "saved" ? "Дождитесь сохранения" : "Опубликовать: ссылка не меняется"
+            saveState !== "saved" ? PUBLISH_BLOCKED[saveState] : "Опубликовать: ссылка не меняется"
           }
-          className="flex h-11 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-xl hover:bg-emerald-500 disabled:opacity-50"
+          className={cn(
+            "flex h-11 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-xl hover:bg-emerald-500 disabled:opacity-50",
+            saveState !== "saved" && "opacity-50",
+          )}
         >
           <Rocket className="size-4" />
           <span className="hidden lg:inline">{publishing ? "Публикуем…" : "Опубликовать"}</span>
