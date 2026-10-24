@@ -10,6 +10,7 @@ synthetic yaw/pitch grid everywhere instead, to check plan <-> pano projections 
 
 import argparse
 import json
+import math
 import shutil
 import tempfile
 import urllib.request
@@ -24,6 +25,8 @@ from map_schema.models import (
     Connector,
     ConnectorKind,
     ConnectorPoint,
+    Fixture,
+    FixtureKind,
     Level,
     LineStringGeometry,
     MapDocument,
@@ -31,6 +34,7 @@ from map_schema.models import (
     OpeningCategory,
     Pano,
     PanoStatus,
+    PanoTileLevel,
     PanoTiles,
     PathLine,
     Poi,
@@ -357,7 +361,52 @@ def build_document(tiles: dict[str, PanoTiles]) -> MapDocument:
         panos=panos,
         paths=paths,
         tours=tours,
+        fixtures=furniture(),
     )
+
+
+def _round(x: float, y: float, d: float) -> PolygonGeometry:
+    ring = [
+        _ll(x + d / 2 * math.cos(a), y + d / 2 * math.sin(a))
+        for a in (i * math.pi / 8 for i in range(16))
+    ]
+    return PolygonGeometry(coordinates=[[*ring, ring[0]]])
+
+
+def furniture() -> list[Fixture]:
+    """Tables, seats, a stage, plants: the plan reads like a real venue, routes go around them."""
+    items: list[tuple[str, str, FixtureKind, str, PolygonGeometry]] = [
+        # Café: round tables and the bar.
+        *[
+            (f"f-cafe-{n}", "l1", FixtureKind.TABLE, "Столик", _round(x, y, 1.2))
+            for n, (x, y) in enumerate([(22, 15), (28.5, 15), (22, 21), (28.5, 21)])
+        ],
+        ("f-cafe-bar", "l1", FixtureKind.COUNTER, "Бар", _rect(30.8, 16, 31.6, 20.5)),
+        # Hall B: rows of seats with an aisle, the stage behind the speaker point.
+        *[
+            (f"f-seats-{n}", "l1", FixtureKind.SEATING, "Кресла", _rect(x0, y, x0 + 4, y + 0.6))
+            for n, (x0, y) in enumerate([(3.5, 17.6), (12.5, 17.6), (3.5, 19), (12.5, 19)])
+        ],
+        ("f-stage", "l1", FixtureKind.STAGE, "Сцена", _rect(7, 22.6, 13, 23.8)),
+        # Hall A: partner stands and a team table.
+        ("f-stand-1", "l1", FixtureKind.BOOTH, "Стенд", _rect(11.5, 1, 13.5, 3)),
+        ("f-table-a", "l1", FixtureKind.TABLE, "Стол", _rect(10.5, 6, 13.5, 7)),
+        # Corridor: a sofa and plants along the walls.
+        ("f-sofa", "l1", FixtureKind.SEATING, "Диван", _rect(23, 11, 25, 11.8)),
+        *[
+            (f"f-plant-{n}", "l1", FixtureKind.PLANT, "Растение", _round(x, 11.3, 0.7))
+            for n, x in enumerate([1.5, 16, 38.5])
+        ],
+        # Lab upstairs: work tables.
+        *[
+            (f"f-lab-{n}", "l2", FixtureKind.TABLE, "Стол", _rect(x, y, x + 2.4, y + 1))
+            for n, (x, y) in enumerate([(3, 19.5), (7, 19.5), (15, 15), (19, 19.5)])
+        ],
+    ]
+    return [
+        Fixture(id=fid, level_id=level, kind=kind, name=name, geometry=geometry)
+        for fid, level, kind, name, geometry in items
+    ]
 
 
 def grid_panorama(width: int = 4096) -> np.ndarray:
@@ -409,17 +458,29 @@ def scene_source(scene: str) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--grid", action="store_true", help="synthetic grid in every panorama")
+    parser.add_argument(
+        "--keep-tiles", action="store_true", help="rebuild the plan only, reuse the pano tiles"
+    )
     args = parser.parse_args()
 
     viewer_demo = ROOT / "apps" / "viewer" / "public" / "demo"
-    for stale in viewer_demo.glob("pano-*"):
-        shutil.rmtree(stale)
     tiles: dict[str, PanoTiles] = {}
+    if args.keep_tiles:
+        for pano in DEMO_PANOS:
+            widths = sorted(int(d.name) for d in (viewer_demo / pano.id).iterdir() if d.is_dir())
+            url = pano_url(pano.id)
+            tiles[pano.id] = PanoTiles(
+                base_url=url,
+                preview_url=f"{url}/preview.webp",
+                levels=[PanoTileLevel(width=w, cols=w // 512, rows=w // 1024) for w in widths],
+            )
+    for stale in [] if args.keep_tiles else viewer_demo.glob("pano-*"):
+        shutil.rmtree(stale)
     with tempfile.TemporaryDirectory() as tmp:
         grid = Path(tmp) / "grid.png"
         if args.grid:
             cv2.imwrite(str(grid), grid_panorama())
-        for pano in DEMO_PANOS:
+        for pano in [] if args.keep_tiles else DEMO_PANOS:
             source = grid if args.grid else scene_source(pano.scene)
             url = pano_url(pano.id)
             levels = make_tiles(source, viewer_demo / pano.id, level_widths=(1024, 2048, 4096))

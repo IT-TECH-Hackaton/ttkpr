@@ -102,3 +102,34 @@ export function labelPoint(bundle: MapBundle, coordinates: LonLat[][]): LonLat |
   }
   return fromLocal(bundle.venue.anchor, best ?? (ring[0] as XY));
 }
+
+/** Size of a room in metres: the sides of its outline's bounding box (in the room's own
+ * orientation for rotated rectangles) and its floor area. */
+export function unitSize(
+  bundle: MapBundle,
+  unit: Unit,
+): { widthM: number; depthM: number; areaM2: number } | null {
+  const ring = localRing(bundle, unit.geometry.coordinates[0] as LonLat[] | undefined);
+  if (ring.length < 4) return null;
+  // The longest edge sets the room's axes, so a rotated rectangle measures as drawn.
+  let angle = 0;
+  let longest = 0;
+  for (let i = 1; i < ring.length; i++) {
+    const [ax, ay] = ring[i - 1] as XY;
+    const [bx, by] = ring[i] as XY;
+    const len = Math.hypot(bx - ax, by - ay);
+    if (len > longest) {
+      longest = len;
+      angle = Math.atan2(by - ay, bx - ax);
+    }
+  }
+  const cos = Math.cos(-angle);
+  const sin = Math.sin(-angle);
+  const us = ring.map(([x, y]) => x * cos - y * sin);
+  const vs = ring.map(([x, y]) => x * sin + y * cos);
+  return {
+    widthM: Math.max(...us) - Math.min(...us),
+    depthM: Math.max(...vs) - Math.min(...vs),
+    areaM2: Math.abs(signedArea(ring)),
+  };
+}

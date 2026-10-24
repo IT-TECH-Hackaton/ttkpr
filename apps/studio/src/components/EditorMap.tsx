@@ -4,6 +4,8 @@ import {
   buildNavGraph,
   bundleBounds,
   DEFAULT_GLYPHS,
+  DETAIL_LAYERS,
+  detailLayers,
   findTourRoute,
   LEVEL_FILTERED_LAYERS,
   type LonLat,
@@ -45,7 +47,7 @@ const GRID_M = 0.5;
 
 const LAYER_GROUPS: Record<LayerGroup, string[]> = {
   underlay: [], // underlay-* layers, handled separately
-  rooms: ["units-fill", "units-outline", "selected-unit"],
+  rooms: ["units-fill", "units-outline", "selected-unit", ...DETAIL_LAYERS],
   labels: ["units-label", "pois-label", "connectors-label"],
   doors: ["openings", "selected-opening", "paths", "paths-hit", "selected-path"],
   connectors: ["connectors", "connectors-label", "selected-connector", "connectors-hit"],
@@ -171,6 +173,8 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       map.addSource(SOURCE.panos, { type: "geojson", data: collections.panos });
       map.addSource(SOURCE.connectors, { type: "geojson", data: collections.connectors });
       map.addSource(SOURCE.paths, { type: "geojson", data: collections.paths });
+      map.addSource(SOURCE.zones, { type: "geojson", data: collections.zones });
+      map.addSource(SOURCE.fixtures, { type: "geojson", data: collections.fixtures });
       map.addSource(STUDIO_PANOS, { type: "geojson", data: EMPTY });
       map.addSource(PREVIEW, { type: "geojson", data: EMPTY });
       map.addSource(TOUR, { type: "geojson", data: EMPTY });
@@ -179,6 +183,7 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       for (const layer of planLayers(initial.levelId)) {
         if (layer.id !== "panos") map.addLayer(layer);
       }
+      for (const layer of detailLayers(initial.levelId)) map.addLayer(layer, "paths");
       const level = onLevel(initial.levelId);
       const highlight = (id: string, source: string, type: "line" | "circle", color: string) =>
         map.addLayer(
@@ -404,6 +409,9 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
         case "poi":
           s.addPoi(at);
           return;
+        case "furniture":
+          s.addFurniture(at, planRotation());
+          return;
         case "stairs":
           s.addConnector(snap(event.lngLat).position);
           return;
@@ -439,6 +447,7 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
             "pois-hit",
             "paths-hit",
             "openings",
+            "fixtures-fill",
             "units-fill",
           ].filter((l) => map.getLayer(l));
           const hit = map.queryRenderedFeatures(event.point, { layers })[0];
@@ -509,6 +518,8 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       collections.connectors,
     );
     (map.getSource(SOURCE.paths) as GeoJSONSource | undefined)?.setData(collections.paths);
+    (map.getSource(SOURCE.zones) as GeoJSONSource | undefined)?.setData(collections.zones);
+    (map.getSource(SOURCE.fixtures) as GeoJSONSource | undefined)?.setData(collections.fixtures);
     syncUnderlays(map, doc.underlays ?? [], useDraft.getState().levelId);
     applyVisibility(map, useDraft.getState().hiddenLayers);
   }, [doc]);
@@ -522,7 +533,7 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map?.isStyleLoaded()) return;
-    for (const layer of LEVEL_FILTERED_LAYERS) {
+    for (const layer of [...LEVEL_FILTERED_LAYERS, ...DETAIL_LAYERS]) {
       if (map.getLayer(layer)) map.setFilter(layer, levelFilter(layer, levelId));
     }
     for (const layer of [

@@ -4,6 +4,7 @@ import {
   type Endpoint,
   findTourRoute,
   type LonLat,
+  labelPoint,
   largestGapM,
   nearestPano,
   nextStep,
@@ -11,10 +12,12 @@ import {
   type RouteStep,
   roomAt,
   sortedLevels,
+  unitAt,
 } from "@ttkpr/map-core";
 import { Button, cn, ThemeSwitch, useTheme } from "@ttkpr/ui";
-import { Box, Trees } from "lucide-react";
+import { Box, CircleHelp, Trees } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Legend } from "../components/Legend";
 import { LevelSwitcher } from "../components/LevelSwitcher";
 import { OfflineControl } from "../components/OfflineControl";
 import { PlaceSheet, SHEET_PEEK } from "../components/PlaceSheet";
@@ -92,6 +95,14 @@ export function MapScreen() {
   const [auto, setAuto] = useState(false);
   const [threeD, setThreeD] = useState(false);
   const [nature, setNature] = useStoredFlag("ttkpr.nature", true);
+  const [roomId, setRoomId] = useState<string | null>(null);
+  // The legend opens by itself the first time a visitor sees a map on this device.
+  const [legendSeen, setLegendSeen] = useStoredFlag("ttkpr.legend.seen", false);
+  const [legend, setLegend] = useState(!legendSeen);
+  const closeLegend = () => {
+    setLegend(false);
+    setLegendSeen(true);
+  };
   const [dollhouse, setDollhouse] = useState(false);
   const { dark } = useTheme();
 
@@ -174,7 +185,31 @@ export function MapScreen() {
   const poiPano = selectedPoi ? nearestPano(map, selectedPoi) : null;
   const destPoiId = tour ? tour.stops?.at(-1) : to && "poiId" in to ? to.poiId : undefined;
 
-  const pickPoi = (poi: Poi) => setSearch({ poi: poi.id, level: poi.levelId });
+  const selectedRoom = selectedPoi
+    ? undefined
+    : map.units?.find((u) => u.id === roomId && u.levelId === levelId);
+  const roomPanos = selectedRoom
+    ? (map.panos ?? []).filter(
+        (p) => p.status === "ready" && unitAt(map, p.levelId, p.position)?.id === selectedRoom.id,
+      )
+    : [];
+
+  const pickPoi = (poi: Poi) => {
+    setRoomId(null);
+    setSearch({ poi: poi.id, level: poi.levelId });
+  };
+
+  const routeToRoom = () => {
+    if (!selectedRoom) return;
+    const position =
+      labelPoint(map, selectedRoom.geometry.coordinates as LonLat[][]) ??
+      ((selectedRoom.geometry.coordinates[0]?.[0] ?? map.venue.anchor) as LonLat);
+    const target = formatEndpoint({ levelId: selectedRoom.levelId, position });
+    const start = search.from ?? search.here;
+    setRoomId(null);
+    setSearch({ to: target, from: start, poi: undefined, level: undefined, walk: undefined });
+    if (!start) setPicker("from");
+  };
 
   const setEnd = (end: End, endpoint: Endpoint) => {
     setPicker(null);
@@ -217,6 +252,8 @@ export function MapScreen() {
 
   const tapPlan = (position: LonLat) => {
     if (!picking) {
+      // A tap on a room opens its card (size, places, panorama); outside rooms closes it.
+      setRoomId(unitAt(map, levelId, position)?.id ?? null);
       setSearch({ poi: undefined });
       return;
     }
@@ -299,6 +336,15 @@ export function MapScreen() {
   );
   const levelSwitcher = (
     <div className="flex flex-col items-end gap-2">
+      <button
+        type="button"
+        aria-label="Обозначения на карте"
+        title="Что значат цвета и значки"
+        onClick={() => setLegend(true)}
+        className="grid size-12 place-items-center rounded-2xl border border-border bg-bg text-fg shadow-lg"
+      >
+        <CircleHelp className="size-5" aria-hidden />
+      </button>
       <LevelSwitcher
         levels={levels}
         value={levelId}
@@ -384,6 +430,12 @@ export function MapScreen() {
         </div>
       }
       peekKey={focus?.n}
+      openKey={selectedPoi?.id ?? selectedRoom?.id}
+      room={selectedRoom}
+      roomPanos={roomPanos.length}
+      onOpenRoomPano={() => roomPanos[0] && setSearch({ pano: roomPanos[0].id })}
+      onRouteToRoom={routeToRoom}
+      onCloseRoom={() => setRoomId(null)}
       wide={wide}
     />
   );
@@ -404,7 +456,11 @@ export function MapScreen() {
         topInset={insets.top}
         bottomInset={insets.bottom}
         leftInset={insets.left}
-        onSelectPoi={(id) => (picking ? setEnd(picking, { poiId: id }) : setSearch({ poi: id }))}
+        onSelectPoi={(id) => {
+          if (picking) return setEnd(picking, { poiId: id });
+          setRoomId(null);
+          setSearch({ poi: id });
+        }}
         onSelectPano={(id) => setSearch({ pano: id })}
         onBackgroundTap={tapPlan}
       />
@@ -474,6 +530,7 @@ export function MapScreen() {
         </Suspense>
       )}
 
+      {legend && !pano && <Legend onClose={closeLegend} />}
       {dollhouse && (
         <Suspense fallback={<div className="fixed inset-0 z-30 bg-bg" />}>
           <Dollhouse

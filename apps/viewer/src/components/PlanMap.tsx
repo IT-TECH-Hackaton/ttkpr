@@ -2,6 +2,9 @@ import {
   applyPlanTheme,
   bundleBounds,
   DEFAULT_GLYPHS,
+  DETAIL_LAYERS,
+  detailLayers,
+  fixtureFeatures,
   LANDSCAPE_LAYERS,
   LANDSCAPE_SOURCE,
   LEVEL_FILTERED_LAYERS,
@@ -57,6 +60,7 @@ interface Props {
 const HIT_LAYERS = ["pois-hit", "panos-hit"] as const;
 const ROUTE_SOURCE = "route-lines";
 const WALLS_SOURCE = "walls-3d";
+const FIXTURES_3D = "fixtures-3d";
 const MARKS_SOURCE = "route-marks";
 const ROUTE_LAYERS = [
   "route-casing",
@@ -135,7 +139,13 @@ export function PlanMap({
       map.addSource(SOURCE.panos, { type: "geojson", data: collections.panos });
       map.addSource(SOURCE.connectors, { type: "geojson", data: collections.connectors });
       map.addSource(SOURCE.paths, { type: "geojson", data: collections.paths });
+      map.addSource(SOURCE.zones, { type: "geojson", data: collections.zones });
+      map.addSource(SOURCE.fixtures, { type: "geojson", data: collections.fixtures });
       for (const layer of planLayers(initialLevel.current)) map.addLayer(layer);
+      // Furniture and zones inside rooms, under walkways and markers.
+      for (const layer of detailLayers(initialLevel.current)) map.addLayer(layer, "paths");
+      // Panoramas open from a room's card, not from dots on the plan.
+      map.setLayoutProperty("panos", "visibility", "none");
       syncUnderlays(map, bundle.underlays ?? [], initialLevel.current);
 
       // Surroundings: the lawn and tree tops under the rooms, 3D trees next to the walls.
@@ -178,6 +188,7 @@ export function PlanMap({
         type: "circle",
         source: SOURCE.panos,
         filter,
+        layout: { visibility: "none" },
         paint: { "circle-radius": 20, "circle-opacity": 0 },
       });
 
@@ -185,6 +196,24 @@ export function PlanMap({
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
+      map.addSource(FIXTURES_3D, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer(
+        {
+          id: "fixtures-3d",
+          type: "fill-extrusion",
+          source: FIXTURES_3D,
+          layout: { visibility: "none" },
+          paint: {
+            "fill-extrusion-color": ["to-color", ["get", "color"], "#d6c7a8"],
+            "fill-extrusion-base": ["get", "base"],
+            "fill-extrusion-height": ["get", "height"],
+          },
+        },
+        "connectors",
+      );
       map.addLayer(
         {
           id: "walls-3d",
@@ -193,6 +222,8 @@ export function PlanMap({
           layout: { visibility: "none" },
           paint: {
             "fill-extrusion-color": "#cbd5e1",
+            // Windows: the wall below the sill and above the lintel are separate pieces.
+            "fill-extrusion-base": ["get", "base"],
             "fill-extrusion-height": ["get", "height"],
             "fill-extrusion-opacity": 0.9,
           },
@@ -335,7 +366,12 @@ export function PlanMap({
     const map = mapRef.current;
     if (!map) return;
     const apply = () => {
-      for (const layer of [...LEVEL_FILTERED_LAYERS, ...HIT_LAYERS, ...ROUTE_LAYERS]) {
+      for (const layer of [
+        ...LEVEL_FILTERED_LAYERS,
+        ...DETAIL_LAYERS,
+        ...HIT_LAYERS,
+        ...ROUTE_LAYERS,
+      ]) {
         if (map.getLayer(layer)) map.setFilter(layer, levelFilter(layer, levelId));
       }
       syncUnderlays(map, bundle.underlays ?? [], levelId);
@@ -366,9 +402,12 @@ export function PlanMap({
     if (!map) return;
     const apply = () => {
       if (!map.getLayer("walls-3d")) return;
-      if (threeD)
+      if (threeD) {
         map.getSource<GeoJSONSource>(WALLS_SOURCE)?.setData(wallFeatures(bundle, levelId));
+        map.getSource<GeoJSONSource>(FIXTURES_3D)?.setData(fixtureFeatures(bundle, levelId));
+      }
       map.setLayoutProperty("walls-3d", "visibility", threeD ? "visible" : "none");
+      map.setLayoutProperty("fixtures-3d", "visibility", threeD ? "visible" : "none");
       map.easeTo(
         threeD
           ? { pitch: 55, bearing: -20, duration: 600 }

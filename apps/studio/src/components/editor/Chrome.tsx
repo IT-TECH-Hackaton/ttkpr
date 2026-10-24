@@ -3,6 +3,7 @@ import type { MapSummary } from "@ttkpr/api-client";
 import { bundleBounds, CONNECTOR_LABELS, POI_CATEGORIES, sortedLevels } from "@ttkpr/map-core";
 import { cn } from "@ttkpr/ui";
 import {
+  Armchair,
   Camera,
   ChartColumn,
   Check,
@@ -35,6 +36,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
+import { FURNITURE } from "../../lib/furniture";
 import { localMapLink } from "../../lib/links";
 import { fitTo, zoomIn, zoomOut } from "../../lib/mapView";
 import { can, ROLE_LABELS } from "../../lib/permissions";
@@ -105,6 +107,14 @@ export const TOOLS: ToolDef[] = [
     needs: "edit",
   },
   {
+    id: "furniture",
+    label: "Мебель",
+    key: "F",
+    icon: <Armchair />,
+    hint: "Клик — стол, диван, стенд или растение в натуральную величину, можно ставить подряд",
+    needs: "edit",
+  },
+  {
     id: "path",
     label: "Дорожка",
     key: "W",
@@ -127,6 +137,7 @@ const DOOR_TYPES: { id: DoorType; label: string }[] = [
   { id: "double", label: "Двойная 1,6 м" },
   { id: "passage", label: "Проход 2 м" },
   { id: "entrance", label: "Вход в здание" },
+  { id: "window", label: "Окно 1,2 м" },
 ];
 
 const SAVE: Record<SaveState, { label: string; icon: ReactNode; tone: string }> = {
@@ -456,6 +467,7 @@ export function Toolbar({ map, onUploadPlan }: { map: MapSummary; onUploadPlan: 
   const doorType = useDraft((s) => s.doorType);
   const connectorKind = useDraft((s) => s.connectorKind);
   const poiCategory = useDraft((s) => s.poiCategory);
+  const furniture = useDraft((s) => s.furniture);
   const snapping = useDraft((s) => s.snapping);
   const { setTool, setOptions } = useDraft.getState();
   const tools = TOOLS.filter((t) => can(map, t.needs));
@@ -498,6 +510,17 @@ export function Toolbar({ map, onUploadPlan }: { map: MapSummary; onUploadPlan: 
         onChange={(v) => {
           setOptions({ poiCategory: v });
           setTool("poi");
+        }}
+      />
+    ),
+    furniture: (
+      <OptionMenu
+        label="Что поставить"
+        value={furniture}
+        options={FURNITURE.map((p) => ({ id: p.id, label: p.label }))}
+        onChange={(v) => {
+          setOptions({ furniture: v });
+          setTool("furniture");
         }}
       />
     ),

@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+// The legend opens on a first visit; these tests are about other things.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("ttkpr.legend.seen", "1"));
+});
+
 // The demo map is static, so the test needs no API: save it, cut the network, reload.
 test("a saved map opens without internet, panoramas included", async ({ page, context }) => {
   await page.goto("/m/demo");

@@ -12,9 +12,20 @@ import type {
 import { CONNECTOR_LABELS, categoryLabel, sortedLevels } from "@ttkpr/map-core";
 import { temporal } from "zundo";
 import { create } from "zustand";
+import { FURNITURE, furnitureAt } from "./lib/furniture";
+import { scaleDocument } from "./lib/scalePlan";
 
-export type Tool = "select" | "rect" | "room" | "door" | "stairs" | "poi" | "path" | "pano";
-export type DoorType = "door" | "double" | "passage" | "entrance";
+export type Tool =
+  | "select"
+  | "rect"
+  | "room"
+  | "door"
+  | "stairs"
+  | "poi"
+  | "furniture"
+  | "path"
+  | "pano";
+export type DoorType = "door" | "double" | "passage" | "entrance" | "window";
 export type ConnectorKind = Connector["kind"];
 export type LayerGroup =
   | "underlay"
@@ -48,6 +59,8 @@ interface DraftState {
   doorType: DoorType;
   connectorKind: ConnectorKind;
   poiCategory: string;
+  /** FURNITURE preset the "Мебель" tool puts. */
+  furniture: string;
   snapping: boolean;
   hiddenLayers: LayerGroup[];
   /** Short message near the toolbar (e.g. "Кликните по стене"). */
@@ -65,7 +78,9 @@ interface DraftState {
   setPanoSpot: (spot: Position | null) => void;
   setMovingPano: (id: string | null) => void;
   setOptions: (
-    patch: Partial<Pick<DraftState, "doorType" | "connectorKind" | "poiCategory" | "snapping">>,
+    patch: Partial<
+      Pick<DraftState, "doorType" | "connectorKind" | "poiCategory" | "furniture" | "snapping">
+    >,
   ) => void;
   toggleLayer: (group: LayerGroup) => void;
   setHint: (hint: string | null) => void;
@@ -78,6 +93,9 @@ interface DraftState {
   addPoi: (position: Position) => void;
   addOpening: (a: Position, b: Position) => void;
   addConnector: (position: Position) => void;
+  addFurniture: (position: Position, rotationDeg: number) => void;
+  /** Everything on the map scaled about a point (fixing a plan drawn at the wrong size). */
+  scalePlan: (factor: number, center: Position) => void;
   addPath: (coordinates: Position[]) => void;
   addTour: () => void;
   updateTour: (id: string, patch: Partial<Tour>) => void;
@@ -123,6 +141,7 @@ export const useDraft = create<DraftState>()(
       doorType: "door",
       connectorKind: "stairs",
       poiCategory: "stand",
+      furniture: "table",
       snapping: true,
       hiddenLayers: [],
       hint: null,
@@ -229,6 +248,22 @@ export const useDraft = create<DraftState>()(
             selectedId: opening.id,
           };
         }),
+      addFurniture: (position, rotationDeg) =>
+        set((s) => {
+          const preset = FURNITURE.find((p) => p.id === s.furniture) ?? FURNITURE[0];
+          if (!preset) return {};
+          const fixture = furnitureAt(
+            preset,
+            s.doc.venue.anchor,
+            position,
+            s.levelId,
+            newId("f"),
+            rotationDeg,
+          );
+          // The tool stays: tables and chairs go in a row, click after click.
+          return { doc: { ...s.doc, fixtures: [...(s.doc.fixtures ?? []), fixture] } };
+        }),
+      scalePlan: (factor, center) => set((s) => ({ doc: scaleDocument(s.doc, factor, center) })),
       addConnector: (position) =>
         set((s) => {
           // Stairs/lifts join this floor with the one above; a second floor appears if needed.
@@ -337,6 +372,7 @@ export const useDraft = create<DraftState>()(
             pois: s.doc.pois?.filter((p) => p.id !== id),
             openings: s.doc.openings?.filter((o) => o.id !== id),
             connectors: s.doc.connectors?.filter((c) => c.id !== id),
+            fixtures: s.doc.fixtures?.filter((f) => f.id !== id),
             underlays: s.doc.underlays?.filter((u) => u.id !== id),
             paths: s.doc.paths?.filter((p) => p.id !== id),
             // A removed point leaves every tour; a removed tour is gone.

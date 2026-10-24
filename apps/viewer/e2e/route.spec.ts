@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+// The legend opens on a first visit; these tests are about other things.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("ttkpr.legend.seen", "1"));
+});
+
 // A visitor scans a "Вы здесь" sign, asks for a route and walks it through the panoramas.
 test("routes from a QR sign and walks the route through panoramas", async ({ page }) => {
   await page.goto("/m/demo?here=p-stand-a1");

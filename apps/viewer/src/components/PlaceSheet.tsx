@@ -1,5 +1,13 @@
-import type { Level, Poi } from "@ttkpr/api-client";
-import { categoryEmoji, categoryLabel, type MapBundle, plural } from "@ttkpr/map-core";
+import type { Level, Poi, Unit } from "@ttkpr/api-client";
+import {
+  categoryEmoji,
+  categoryLabel,
+  type MapBundle,
+  plural,
+  poisIn,
+  UNIT_LABELS,
+  unitSize,
+} from "@ttkpr/map-core";
 import { Button } from "@ttkpr/ui";
 import { LocateFixed, Navigation, Route as RouteIcon, View, X } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -26,13 +34,21 @@ interface Props {
   onOpenTour?: (id: string) => void;
   /** Changing it lowers the sheet to the peek height, to show the plan (a tapped route step). */
   peekKey?: number;
+  /** A room tapped on the plan: its card (size, places, panorama, route). */
+  room?: Unit;
+  roomPanos?: number;
+  onOpenRoomPano?: () => void;
+  onRouteToRoom?: () => void;
+  onCloseRoom?: () => void;
+  /** Changing it raises the sheet halfway: a place or a room was picked, show its card. */
+  openKey?: string;
 }
 
 /** Pixel snap points; PEEK must match the map's bottom inset in MapScreen. */
 export const SHEET_PEEK = 132;
 const SNAP_POINTS = [0, SHEET_PEEK, 0.55, 1];
 
-export function PlaceSheet({ wide, peekKey, onClose, ...props }: Props) {
+export function PlaceSheet({ wide, peekKey, openKey, onClose, ...props }: Props) {
   // Open after mount: snap points are measured on mount, so initialSnap needs a mounted sheet.
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(true), []);
@@ -43,6 +59,9 @@ export function PlaceSheet({ wide, peekKey, onClose, ...props }: Props) {
     sheetRef.current?.snapTo(1);
     scrollRef.current?.scrollTo({ top: 0 }); // the peek shows the summary, not the middle of the list
   }, [peekKey]);
+  useEffect(() => {
+    if (openKey) sheetRef.current?.snapTo(2);
+  }, [openKey]);
 
   const content = <PlaceContent {...props} onClose={onClose} />;
 
@@ -93,7 +112,12 @@ function PlaceContent({
   onClose,
   venueExtra,
   onOpenTour,
-}: Omit<Props, "wide" | "peekKey">) {
+  room,
+  roomPanos = 0,
+  onOpenRoomPano,
+  onRouteToRoom,
+  onCloseRoom,
+}: Omit<Props, "wide" | "peekKey" | "openKey">) {
   const levelPois = (bundle.pois ?? []).filter((p) => p.levelId === level?.id);
   const tours = (bundle.tours ?? []).filter((t) => (t.stops?.length ?? 0) >= 2);
 
@@ -141,6 +165,68 @@ function PlaceContent({
           Проложить маршрут отсюда
         </button>
         {poi.description && <p className="leading-relaxed">{poi.description}</p>}
+      </section>
+    );
+  }
+
+  if (room && !routePanel) {
+    const size = unitSize(bundle, room);
+    const inside = poisIn(bundle, room);
+    const kind = UNIT_LABELS[room.category] ?? "Помещение";
+    return (
+      <section aria-label={room.name ?? kind} className="space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xl font-semibold leading-tight">{room.name || kind}</h2>
+            <p className="text-sm text-muted">
+              {[
+                room.name && room.name !== kind ? kind : null,
+                level?.name,
+                size
+                  ? `${size.widthM.toFixed(1)} × ${size.depthM.toFixed(1)} м, ${Math.round(size.areaM2)} м²`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </div>
+          <Button variant="ghost" aria-label="Закрыть" onClick={onCloseRoom} className="-mr-2 px-3">
+            <X className="size-5" aria-hidden />
+          </Button>
+        </div>
+        <div className="flex gap-2">
+          <Button className="min-w-0 flex-1" onClick={onRouteToRoom}>
+            <Navigation className="size-4 shrink-0" aria-hidden />
+            <span className="truncate">Маршрут сюда</span>
+          </Button>
+          <Button
+            variant="secondary"
+            className="min-w-0 flex-1"
+            disabled={roomPanos === 0}
+            onClick={onOpenRoomPano}
+          >
+            <View className="size-4 shrink-0" aria-hidden />
+            <span className="truncate">{roomPanos === 0 ? "Нет панорамы" : "Панорама"}</span>
+          </Button>
+        </div>
+        {room.description && <p className="leading-relaxed">{room.description}</p>}
+        {inside.length > 0 && (
+          <ul className="divide-y divide-border">
+            {inside.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => onPickPoi(p)}
+                  className="flex min-h-12 w-full items-center gap-3 text-left"
+                >
+                  <span aria-hidden>{categoryEmoji(p.category)}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
+                  <span className="shrink-0 text-sm text-muted">{categoryLabel(p.category)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     );
   }

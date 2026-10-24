@@ -117,6 +117,7 @@ export const DOOR_WIDTHS: Record<string, number> = {
   double: 1.6,
   passage: 2.0,
   entrance: 1.8,
+  window: 1.2,
 };
 
 /** Door of a given width centred on the nearest wall point, along the wall. */

@@ -5,10 +5,12 @@ import {
   findTourRoute,
   formatDistance,
   formatDuration,
+  labelPoint,
   POI_CATEGORIES,
   plural,
   sortedLevels,
   UNIT_COLORS,
+  unitSize,
 } from "@ttkpr/map-core";
 import { Button } from "@ttkpr/ui";
 import {
@@ -25,6 +27,7 @@ import { detectRooms, placeRing } from "../lib/autoPlan";
 import { mapLink } from "../lib/links";
 import { cornersPlacement, placementCorners, viewCenter } from "../lib/mapView";
 import { usePanoramaActions } from "../lib/panos";
+import { scalePoint } from "../lib/scalePlan";
 import { useDraft } from "../store";
 import { CaptureQrDialog } from "./CaptureQrDialog";
 import { PlanImportDialog } from "./PlanImportDialog";
@@ -103,6 +106,7 @@ export function Inspector({
   const opening = doc.openings?.find((o) => o.id === selectedId);
   const underlay = doc.underlays?.find((u) => u.id === selectedId);
   const connector = doc.connectors?.find((c) => c.id === selectedId);
+  const fixture = doc.fixtures?.find((f) => f.id === selectedId);
   const tour = doc.tours?.find((t) => t.id === selectedId);
   const path = doc.paths?.find((w) => w.id === selectedId);
   const pano = panos.find((p) => p.id === selectedId);
@@ -110,7 +114,8 @@ export function Inspector({
   let content: ReactNode;
   if (panoSpot) content = <PanoSpotPanel mapId={mapId} spot={panoSpot} />;
   else if (pano) content = <PanoPanel key={pano.id} mapId={mapId} pano={pano} canEdit={canEdit} />;
-  else if (unit) content = <UnitPanel id={unit.id} />;
+  else if (unit) content = <UnitPanel id={unit.id} mapId={mapId} panos={panos} />;
+  else if (fixture) content = <FixturePanel id={fixture.id} />;
   else if (poi) content = <PoiPanel id={poi.id} />;
   else if (underlay) content = <UnderlayPanel id={underlay.id} />;
   else if (connector) content = <ConnectorPanel id={connector.id} />;
@@ -203,7 +208,7 @@ function DeleteButton({ id }: { id: string }) {
   );
 }
 
-function UnitPanel({ id }: { id: string }) {
+function UnitPanel({ id, mapId, panos }: { id: string; mapId: string; panos: PanoramaOut[] }) {
   const unit = useDraft((s) => s.doc.units?.find((u) => u.id === id));
   const { updateUnit } = useDraft.getState();
   if (!unit) return null;
@@ -241,7 +246,86 @@ function UnitPanel({ id }: { id: string }) {
         />
         Можно пройти (участвует в маршрутах)
       </label>
+      <RoomSize unitId={unit.id} mapId={mapId} panos={panos} />
       <DeleteButton id={unit.id} />
+    </Section>
+  );
+}
+
+/**
+ * Size of the room as drawn, and "real width": typing the measured width rescales the whole
+ * plan (rooms, doors, places, furniture, plan images and panoramas), so route times are right.
+ */
+function RoomSize({
+  unitId,
+  mapId,
+  panos,
+}: {
+  unitId: string;
+  mapId: string;
+  panos: PanoramaOut[];
+}) {
+  const doc = useDraft((s) => s.doc);
+  const unit = doc.units?.find((u) => u.id === unitId);
+  const actions = usePanoramaActions(mapId);
+  const [real, setReal] = useState("");
+  const size = unit ? unitSize(doc, unit) : null;
+  if (!unit || !size) return null;
+  const wanted = Number(real.replace(",", "."));
+  const factor = wanted > 0 ? wanted / size.widthM : 0;
+  const apply = () => {
+    if (!factor || Math.abs(factor - 1) < 0.001) return;
+    const center = (labelPoint(doc, unit.geometry.coordinates as [number, number][][]) ??
+      doc.venue.anchor) as [number, number];
+    useDraft.getState().scalePlan(factor, center);
+    for (const p of panos) {
+      const position = scalePoint(doc.venue.anchor, p.position, factor, center);
+      actions.update.mutate({ id: p.id, patch: { position } });
+    }
+    setReal("");
+  };
+  return (
+    <div className="space-y-2 rounded-xl bg-surface p-3 text-sm">
+      <p>
+        Размер: <b>{size.widthM.toFixed(1)}</b> × <b>{size.depthM.toFixed(1)}</b> м,{" "}
+        {Math.round(size.areaM2)} м²
+      </p>
+      <label className="flex flex-wrap items-center gap-2">
+        Реальная длина, м
+        <input
+          type="number"
+          inputMode="decimal"
+          min={0.5}
+          step={0.1}
+          className={`${field} w-24`}
+          placeholder={size.widthM.toFixed(1)}
+          value={real}
+          onChange={(e) => setReal(e.target.value)}
+        />
+      </label>
+      {factor > 0 && Math.abs(factor - 1) >= 0.001 && (
+        <Button variant="secondary" className="w-full" onClick={apply}>
+          Пересчитать масштаб всего плана ×{factor.toFixed(2)}
+        </Button>
+      )}
+      <p className="text-xs text-muted">
+        Если маршрут показывает слишком много минут, план нарисован не в масштабе: измерьте длинную
+        сторону одной комнаты и введите её — весь план подстроится. Отменить — Ctrl+Z.
+      </p>
+    </div>
+  );
+}
+
+function FixturePanel({ id }: { id: string }) {
+  const fixture = useDraft((s) => s.doc.fixtures?.find((f) => f.id === id));
+  if (!fixture) return null;
+  return (
+    <Section title="Мебель">
+      <p className="text-sm">{fixture.name ?? "Предмет"}</p>
+      <p className="text-xs text-muted">
+        {fixture.obstacle === false ? "Маршруты проходят рядом." : "Маршруты обходят его стороной."}
+      </p>
+      <DeleteButton id={fixture.id} />
     </Section>
   );
 }

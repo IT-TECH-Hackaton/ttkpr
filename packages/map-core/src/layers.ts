@@ -34,6 +34,9 @@ interface PlanProps {
   levelId: string;
   name: string;
   category: string;
+  /** Rooms: a place marker inside (the name moves up), one named like the room (no name). */
+  hasPoi?: boolean;
+  dupName?: boolean;
   /** Organizer's fill (#rrggbb) and its dark-theme counterpart; absent = by category. */
   color?: string;
   colorDark?: string;
@@ -69,6 +72,33 @@ function collection<G extends Polygon | LineString | Point>(
   return { type: "FeatureCollection", features };
 }
 
+/** Ray casting in lon/lat: fine at the scale of a building. */
+function inRing(p: number[], ring: number[][]): boolean {
+  const [px = 0, py = 0] = p;
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi = 0, yi = 0] = ring[i] ?? [];
+    const [xj = 0, yj = 0] = ring[j] ?? [];
+    if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/** Where a room's name goes: above its place marker, or nowhere when the place has its name. */
+function unitLabel(bundle: MapBundle, unit: NonNullable<MapBundle["units"]>[number]) {
+  const ring = unit.geometry.coordinates[0] ?? [];
+  const inside = (bundle.pois ?? []).filter(
+    (p) => p.levelId === unit.levelId && inRing(p.position, ring),
+  );
+  const name = (unit.name ?? "").trim().toLowerCase();
+  return {
+    ...(inside.length > 0 ? { hasPoi: true } : {}),
+    ...(inside.some((p) => p.name.trim().toLowerCase() === name) ? { dupName: true } : {}),
+  };
+}
+
 export function toCollections(bundle: MapBundle): PlanCollections {
   return {
     units: collection(
@@ -81,6 +111,7 @@ export function toCollections(bundle: MapBundle): PlanCollections {
           levelId: u.levelId,
           name: u.name ?? "",
           category: u.category,
+          ...unitLabel(bundle, u),
           ...colors(u.color),
           ...restricted(u.access),
         },
@@ -320,10 +351,18 @@ export function planLayers(levelId: string): AddLayerObject[] {
       source: SOURCE.units,
       filter: levelFilter("units-label", levelId),
       layout: {
-        "text-field": ["get", "name"],
+        // A place inside the room has a marker in the middle: the room's name moves above it,
+        // and is left out when the place carries the same name ("Гардероб" twice).
+        "text-field": ["case", ["to-boolean", ["get", "dupName"]], "", ["get", "name"]],
         "text-font": PLAN_FONT,
         "text-size": 12,
         "text-max-width": 8,
+        "text-offset": [
+          "case",
+          ["to-boolean", ["get", "hasPoi"]],
+          ["literal", [0, -1.9]],
+          ["literal", [0, 0]],
+        ],
       },
       paint: { "text-color": "#5b6577", "text-halo-color": "#ffffff", "text-halo-width": 1 },
     },
@@ -345,7 +384,8 @@ export function planLayers(levelId: string): AddLayerObject[] {
       source: SOURCE.connectors,
       filter,
       layout: {
-        "text-field": ["get", "name"],
+        // Stairs and lifts are explained by the legend; their names only cluttered the plan.
+        "text-field": "",
         "text-font": PLAN_FONT,
         "text-size": 11,
         "text-offset": [0, 1.3],
@@ -490,7 +530,14 @@ export const DETAIL_LAYERS = [
 
 export function levelFilter(layerId: string, levelId: string): FilterSpecification {
   const base = onLevel(levelId);
-  return layerId === "units-label" ? ["all", base, ["!=", ["get", "category"], "corridor"]] : base;
+  // Corridors need no name; stairs and lifts have their own marker (see the legend).
+  return layerId === "units-label"
+    ? [
+        "all",
+        base,
+        ["!", ["in", ["get", "category"], ["literal", ["corridor", "stairs", "elevator"]]]],
+      ]
+    : base;
 }
 
 /** [[west, south], [east, north]] of all units, for fitBounds. */
