@@ -39,6 +39,7 @@ interface Props {
   roomPanos?: number;
   onOpenRoomPano?: () => void;
   onRouteToRoom?: () => void;
+  onRouteFromRoom?: () => void;
   onCloseRoom?: () => void;
   /** Changing it raises the sheet halfway: a place or a room was picked, show its card. */
   openKey?: string;
@@ -116,6 +117,7 @@ function PlaceContent({
   roomPanos = 0,
   onOpenRoomPano,
   onRouteToRoom,
+  onRouteFromRoom,
   onCloseRoom,
 }: Omit<Props, "wide" | "peekKey" | "openKey">) {
   const levelPois = (bundle.pois ?? []).filter((p) => p.levelId === level?.id);
@@ -209,6 +211,13 @@ function PlaceContent({
             <span className="truncate">{roomPanos === 0 ? "Нет панорамы" : "Панорама"}</span>
           </Button>
         </div>
+        <button
+          type="button"
+          onClick={onRouteFromRoom}
+          className="min-h-11 text-sm font-medium text-accent"
+        >
+          Проложить маршрут отсюда
+        </button>
         {room.description && <p className="leading-relaxed">{room.description}</p>}
         {inside.length > 0 && (
           <ul className="divide-y divide-border">

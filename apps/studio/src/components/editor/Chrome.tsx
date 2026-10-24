@@ -23,6 +23,7 @@ import {
   Menu,
   Minus,
   MousePointer2,
+  Move,
   Pentagon,
   Plus,
   QrCode,
@@ -63,7 +64,7 @@ export const TOOLS: ToolDef[] = [
     label: "Выбор",
     key: "V",
     icon: <MousePointer2 />,
-    hint: "Выбрать и перетащить",
+    hint: "Клик — выбрать. Точки на стенах и угол меняют размер",
     needs: "capture",
   },
   {
@@ -71,7 +72,7 @@ export const TOOLS: ToolDef[] = [
     label: "Комната",
     key: "R",
     icon: <Square />,
-    hint: "Два клика по углам — комната прилипает к соседним",
+    hint: "Два клика по углам. Двойной клик включает перемещение",
     needs: "edit",
   },
   {
@@ -111,7 +112,15 @@ export const TOOLS: ToolDef[] = [
     label: "Мебель",
     key: "F",
     icon: <Armchair />,
-    hint: "Клик — стол, диван, стенд или растение в натуральную величину, можно ставить подряд",
+    hint: "Клик — стол, диван, стенд или растение. Двойной клик или двойное нажатие включает перемещение",
+    needs: "edit",
+  },
+  {
+    id: "move",
+    label: "Перемещение",
+    key: "G",
+    icon: <Move />,
+    hint: "Перетащите комнату, мебель, точку или панораму",
     needs: "edit",
   },
   {
@@ -411,10 +420,12 @@ function ToolButton({
   def,
   active,
   onClick,
+  onDoubleClick,
 }: {
   def: ToolDef;
   active: boolean;
   onClick: () => void;
+  onDoubleClick?: () => void;
 }) {
   return (
     <button
@@ -423,6 +434,7 @@ function ToolButton({
       aria-label={def.label}
       aria-pressed={active}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       className={cn(iconButton, active && "bg-accent text-white hover:bg-accent")}
     >
       {def.icon}
@@ -552,7 +564,14 @@ export function Toolbar({ map, onUploadPlan }: { map: MapSummary; onUploadPlan: 
     >
       {tools.map((def) => (
         <div key={def.id} className="flex items-center">
-          <ToolButton def={def} active={tool === def.id} onClick={() => setTool(def.id)} />
+          <ToolButton
+            def={def}
+            active={tool === def.id}
+            onClick={() => setTool(def.id)}
+            onDoubleClick={
+              def.id === "furniture" || def.id === "rect" ? () => setTool("move") : undefined
+            }
+          />
           {options[def.id]}
         </div>
       ))}

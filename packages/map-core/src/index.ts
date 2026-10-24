@@ -1,6 +1,7 @@
 export * from "./bundle";
 export * from "./categories";
 export * from "./color";
+export * from "./connectorIcons";
 export * from "./geo";
 export * from "./i18n";
 export * from "./landscape";

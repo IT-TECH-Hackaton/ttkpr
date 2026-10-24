@@ -1,5 +1,6 @@
 import type {
   Connector,
+  Fixture,
   Level,
   MapDocument,
   Opening,
@@ -23,6 +24,7 @@ export type Tool =
   | "stairs"
   | "poi"
   | "furniture"
+  | "move"
   | "path"
   | "pano";
 export type DoorType = "door" | "double" | "passage" | "entrance" | "window";
@@ -104,7 +106,10 @@ interface DraftState {
   removeTourStop: (id: string, index: number) => void;
   setEditingTour: (id: string | null) => void;
   updateUnit: (id: string, patch: Partial<Unit>) => void;
+  /** Slide one wall, and the doors that sit on it, as a single undo step. */
+  resizeUnit: (id: string, ring: Position[], openings: { id: string; line: Position[] }[]) => void;
   updatePoi: (id: string, patch: Partial<Poi>) => void;
+  updateFixture: (id: string, patch: Partial<Fixture>) => void;
   remove: (id: string) => void;
   addLevel: () => void;
   updateLevel: (id: string, patch: Partial<Level>) => void;
@@ -360,9 +365,39 @@ export const useDraft = create<DraftState>()(
         set((s) => ({
           doc: { ...s.doc, units: s.doc.units?.map((u) => (u.id === id ? { ...u, ...patch } : u)) },
         })),
+      resizeUnit: (id, ring, moved) =>
+        set((s) => ({
+          doc: {
+            ...s.doc,
+            units: s.doc.units?.map((u) =>
+              u.id === id
+                ? {
+                    ...u,
+                    geometry: {
+                      type: "Polygon" as const,
+                      coordinates: [ring, ...u.geometry.coordinates.slice(1)],
+                    },
+                  }
+                : u,
+            ),
+            openings: s.doc.openings?.map((o) => {
+              const next = moved.find((m) => m.id === o.id);
+              return next
+                ? { ...o, geometry: { type: "LineString" as const, coordinates: next.line } }
+                : o;
+            }),
+          },
+        })),
       updatePoi: (id, patch) =>
         set((s) => ({
           doc: { ...s.doc, pois: s.doc.pois?.map((p) => (p.id === id ? { ...p, ...patch } : p)) },
+        })),
+      updateFixture: (id, patch) =>
+        set((s) => ({
+          doc: {
+            ...s.doc,
+            fixtures: s.doc.fixtures?.map((f) => (f.id === id ? { ...f, ...patch } : f)),
+          },
         })),
       remove: (id) =>
         set((s) => ({

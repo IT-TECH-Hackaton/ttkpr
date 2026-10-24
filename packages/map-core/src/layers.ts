@@ -372,7 +372,7 @@ export function planLayers(levelId: string): AddLayerObject[] {
       source: SOURCE.connectors,
       filter,
       paint: {
-        "circle-radius": 9,
+        "circle-radius": 12,
         "circle-color": "#7c3aed",
         "circle-stroke-color": "#ffffff",
         "circle-stroke-width": 2,
@@ -384,7 +384,23 @@ export function planLayers(levelId: string): AddLayerObject[] {
       source: SOURCE.connectors,
       filter,
       layout: {
-        // Stairs and lifts are explained by the legend; their names only cluttered the plan.
+        // A white glyph inside the purple dot: stairs, a lift, an escalator or a ramp.
+        // Names stay off the plan; the legend explains the mark.
+        "icon-image": [
+          "match",
+          ["get", "category"],
+          "elevator",
+          "connector-elevator",
+          "escalator",
+          "connector-escalator",
+          "ramp",
+          "connector-ramp",
+          "connector-stairs",
+        ],
+        "icon-size": 0.62,
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true,
+        "icon-pitch-alignment": "viewport",
         "text-field": "",
         "text-font": PLAN_FONT,
         "text-size": 11,
@@ -508,7 +524,8 @@ export function detailLayers(levelId: string): AddLayerObject[] {
       filter,
       minzoom: 19.5,
       layout: {
-        "text-field": ["get", "name"],
+        // Names stay in the editor panel. On the plan a label on every table only clutters it.
+        "text-field": "",
         "text-font": PLAN_FONT,
         "text-size": 10,
         "text-max-width": 6,

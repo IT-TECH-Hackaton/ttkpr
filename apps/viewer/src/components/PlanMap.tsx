@@ -1,4 +1,5 @@
 import {
+  addConnectorIcons,
   applyPlanTheme,
   bundleBounds,
   DEFAULT_GLYPHS,
@@ -27,6 +28,7 @@ import { useTheme } from "@ttkpr/ui";
 import type { GeoJSONSource } from "maplibre-gl";
 import { type ExpressionSpecification, Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useRef } from "react";
+import { registerMap } from "../lib/mapCamera";
 import { legBounds, routeFeatures } from "../lib/routing";
 
 interface Props {
@@ -129,6 +131,7 @@ export function PlanMap({
       pitchWithRotate: false,
     });
     mapRef.current = map;
+    registerMap(map);
     if (import.meta.env.DEV) (window as unknown as { planMap?: MapLibreMap }).planMap = map;
 
     map.on("load", () => {
@@ -141,6 +144,7 @@ export function PlanMap({
       map.addSource(SOURCE.paths, { type: "geojson", data: collections.paths });
       map.addSource(SOURCE.zones, { type: "geojson", data: collections.zones });
       map.addSource(SOURCE.fixtures, { type: "geojson", data: collections.fixtures });
+      addConnectorIcons(map);
       for (const layer of planLayers(initialLevel.current)) map.addLayer(layer);
       // Furniture and zones inside rooms, under walkways and markers.
       for (const layer of detailLayers(initialLevel.current)) map.addLayer(layer, "paths");
@@ -357,6 +361,7 @@ export function PlanMap({
     map.getCanvas().addEventListener("webglcontextlost", (event) => event.preventDefault());
 
     return () => {
+      registerMap(null);
       map.remove();
       mapRef.current = null;
     };

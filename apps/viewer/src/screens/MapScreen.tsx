@@ -15,7 +15,7 @@ import {
   unitAt,
 } from "@ttkpr/map-core";
 import { Button, cn, ThemeSwitch, useTheme } from "@ttkpr/ui";
-import { Box, CircleHelp, Trees } from "lucide-react";
+import { Box, CircleHelp, Minus, Plus, Trees } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Legend } from "../components/Legend";
 import { LevelSwitcher } from "../components/LevelSwitcher";
@@ -26,6 +26,7 @@ import { RouteCard, TourCard } from "../components/RouteCard";
 import { SearchBar } from "../components/SearchBar";
 import { WalkControls } from "../components/WalkControls";
 import { useMapBundle } from "../lib/bundle";
+import { zoomIn, zoomOut } from "../lib/mapCamera";
 import { type End, endpointLabel, formatEndpoint, useNavGraph, useRoute } from "../lib/routing";
 import { usePoiSearch } from "../lib/search";
 import { track } from "../lib/stats";
@@ -199,16 +200,29 @@ export function MapScreen() {
     setSearch({ poi: poi.id, level: poi.levelId });
   };
 
-  const routeToRoom = () => {
-    if (!selectedRoom) return;
+  const roomAsEndpoint = () => {
+    if (!selectedRoom) return null;
     const position =
       labelPoint(map, selectedRoom.geometry.coordinates as LonLat[][]) ??
       ((selectedRoom.geometry.coordinates[0]?.[0] ?? map.venue.anchor) as LonLat);
-    const target = formatEndpoint({ levelId: selectedRoom.levelId, position });
+    return formatEndpoint({ levelId: selectedRoom.levelId, position });
+  };
+
+  const routeToRoom = () => {
+    const target = roomAsEndpoint();
+    if (!target) return;
     const start = search.from ?? search.here;
     setRoomId(null);
     setSearch({ to: target, from: start, poi: undefined, level: undefined, walk: undefined });
     if (!start) setPicker("from");
+  };
+
+  const routeFromRoom = () => {
+    const start = roomAsEndpoint();
+    if (!start) return;
+    setRoomId(null);
+    setSearch({ from: start, poi: undefined, level: undefined, walk: undefined });
+    if (!search.to) setPicker("to");
   };
 
   const setEnd = (end: End, endpoint: Endpoint) => {
@@ -384,6 +398,26 @@ export function MapScreen() {
       >
         <Box className="size-5" aria-hidden />
       </button>
+      <div className="hidden flex-col gap-2 md:flex">
+        <button
+          type="button"
+          aria-label="Приблизить"
+          title="Приблизить"
+          onClick={zoomIn}
+          className="grid size-12 place-items-center rounded-2xl border border-border bg-bg text-fg shadow-lg"
+        >
+          <Plus className="size-5" aria-hidden />
+        </button>
+        <button
+          type="button"
+          aria-label="Отдалить"
+          title="Отдалить"
+          onClick={zoomOut}
+          className="grid size-12 place-items-center rounded-2xl border border-border bg-bg text-fg shadow-lg"
+        >
+          <Minus className="size-5" aria-hidden />
+        </button>
+      </div>
     </div>
   );
   // The sheet is portalled above everything: hidden under a panorama or the end picker.
@@ -435,6 +469,7 @@ export function MapScreen() {
       roomPanos={roomPanos.length}
       onOpenRoomPano={() => roomPanos[0] && setSearch({ pano: roomPanos[0].id })}
       onRouteToRoom={routeToRoom}
+      onRouteFromRoom={routeFromRoom}
       onCloseRoom={() => setRoomId(null)}
       wide={wide}
     />

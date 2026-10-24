@@ -1,5 +1,6 @@
 import type { PanoramaOut } from "@ttkpr/api-client";
 import {
+  addConnectorIcons,
   applyPlanTheme,
   buildNavGraph,
   bundleBounds,
@@ -7,6 +8,7 @@ import {
   DETAIL_LAYERS,
   detailLayers,
   findTourRoute,
+  fromLocal,
   LEVEL_FILTERED_LAYERS,
   type LonLat,
   levelFilter,
@@ -15,6 +17,8 @@ import {
   SOURCE,
   syncUnderlays,
   toCollections,
+  toLocal,
+  type XY,
 } from "@ttkpr/map-core";
 import { useTheme } from "@ttkpr/ui";
 import type { Feature, FeatureCollection } from "geojson";
@@ -34,6 +38,14 @@ import {
 } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { cornersPlacement, registerMap } from "../lib/mapView";
+import {
+  moveCorner,
+  moveRoom,
+  moveWall,
+  rectangleCorner,
+  shiftOpenings,
+  wallHandles,
+} from "../lib/resize";
 import { DOOR_WIDTHS, doorOnWall, metersPerPixel, rectangleRing, snapPoint } from "../lib/snap";
 import { type LayerGroup, useDraft } from "../store";
 
@@ -41,13 +53,21 @@ const STUDIO_PANOS = "studio-panos";
 // Route of the selected tour (preview of what visitors get), with numbered stops.
 const TOUR = "studio-tour";
 const PREVIEW = "draft-preview";
+const HANDLES = "draft-handles";
 const SNAP_PX = 12;
 const DOOR_PX = 28;
 const GRID_M = 0.5;
 
 const LAYER_GROUPS: Record<LayerGroup, string[]> = {
   underlay: [], // underlay-* layers, handled separately
-  rooms: ["units-fill", "units-outline", "selected-unit", ...DETAIL_LAYERS],
+  rooms: [
+    "units-fill",
+    "units-outline",
+    "selected-unit",
+    "wall-handles",
+    "wall-handles-hit",
+    ...DETAIL_LAYERS,
+  ],
   labels: ["units-label", "pois-label", "connectors-label"],
   doors: ["openings", "selected-opening", "paths", "paths-hit", "selected-path"],
   connectors: ["connectors", "connectors-label", "selected-connector", "connectors-hit"],
@@ -93,7 +113,50 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
   const mapRef = useRef<MapLibreMap | null>(null);
   const drawRef = useRef<TerraDraw | null>(null);
   const rectStart = useRef<LonLat | null>(null);
-  const dragging = useRef<{ kind: "poi" | "pano"; id: string } | null>(null);
+  const dragging = useRef<
+    | { kind: "poi" | "pano"; id: string }
+    | { kind: "fixture"; id: string; origin: Position; rings: Position[][] }
+    | {
+        kind: "wall";
+        id: string;
+        edge: number;
+        ring: XY[];
+        openings: { id: string; line: XY[] }[];
+        cursor: string;
+        latest: {
+          ring: XY[];
+          openings: { id: string; line: XY[] }[];
+          offset: number;
+        } | null;
+      }
+    | {
+        kind: "corner";
+        id: string;
+        corner: number;
+        ring: XY[];
+        openings: { id: string; line: XY[] }[];
+        cursor: string;
+        latest: {
+          ring: XY[];
+          openings: { id: string; line: XY[] }[];
+          offset: number;
+        } | null;
+      }
+    | {
+        kind: "room";
+        id: string;
+        origin: XY;
+        ring: XY[];
+        openings: { id: string; line: XY[] }[];
+        latest: {
+          ring: XY[];
+          openings: { id: string; line: XY[] }[];
+          offset: number;
+        } | null;
+      }
+    | null
+  >(null);
+  const handlesRef = useRef<() => FeatureCollection>(() => EMPTY);
   const props = useRef({ onMovePano, canEdit });
   props.current = { onMovePano, canEdit };
 
@@ -177,9 +240,11 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       map.addSource(SOURCE.fixtures, { type: "geojson", data: collections.fixtures });
       map.addSource(STUDIO_PANOS, { type: "geojson", data: EMPTY });
       map.addSource(PREVIEW, { type: "geojson", data: EMPTY });
+      map.addSource(HANDLES, { type: "geojson", data: EMPTY });
       map.addSource(TOUR, { type: "geojson", data: EMPTY });
 
       // The bundle's pano layer is replaced by live panoramas from the API.
+      addConnectorIcons(map);
       for (const layer of planLayers(initial.levelId)) {
         if (layer.id !== "panos") map.addLayer(layer);
       }
@@ -324,6 +389,31 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
           "circle-stroke-width": 2,
         },
       });
+      map.addLayer({
+        id: "preview-guide",
+        type: "line",
+        source: PREVIEW,
+        filter: ["==", ["get", "kind"], "guide"],
+        paint: { "line-color": "#38bdf8", "line-width": 1.5, "line-dasharray": [1, 1.5] },
+      });
+      // Figma-style edge handles: a small dot on the line, a wider invisible grab target on top.
+      map.addLayer({
+        id: "wall-handles",
+        type: "circle",
+        source: HANDLES,
+        paint: {
+          "circle-radius": 5,
+          "circle-color": "#ffffff",
+          "circle-stroke-color": "#2563eb",
+          "circle-stroke-width": 2,
+        },
+      });
+      map.addLayer({
+        id: "wall-handles-hit",
+        type: "circle",
+        source: HANDLES,
+        paint: { "circle-radius": 16, "circle-opacity": 0 },
+      });
 
       const draw = new TerraDraw({
         adapter: new TerraDrawMapLibreGLAdapter({ map }),
@@ -349,11 +439,295 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       syncUnderlays(map, initial.doc.underlays ?? [], initial.levelId);
     });
 
+    const paintUnit = (id: string, ring: Position[]) => {
+      const unit = useDraft.getState().doc.units?.find((u) => u.id === id);
+      const holes = unit?.geometry.coordinates.slice(1) ?? [];
+      const collections = toCollections(useDraft.getState().doc);
+      (map.getSource(SOURCE.units) as GeoJSONSource).setData({
+        type: "FeatureCollection",
+        features: collections.units.features.map((feature) =>
+          feature.properties?.id === id
+            ? {
+                ...feature,
+                geometry: { type: "Polygon" as const, coordinates: [ring, ...holes] },
+              }
+            : feature,
+        ),
+      });
+    };
+    const paintOpenings = (moved: { id: string; line: Position[] }[]) => {
+      const byId = new Map(moved.map((o) => [o.id, o.line]));
+      const collections = toCollections(useDraft.getState().doc);
+      (map.getSource(SOURCE.openings) as GeoJSONSource).setData({
+        type: "FeatureCollection",
+        features: collections.openings.features.map((feature) => {
+          const line = byId.get(String(feature.properties?.id ?? ""));
+          return line
+            ? { ...feature, geometry: { type: "LineString" as const, coordinates: line } }
+            : feature;
+        }),
+      });
+    };
+    const paintHandles = (id: string, ring: XY[]) => {
+      const anchor = useDraft.getState().doc.venue.anchor;
+      const minM = metersPerPixel(map.getCenter().lat, map.getZoom()) * 28;
+      (map.getSource(HANDLES) as GeoJSONSource | undefined)?.setData({
+        type: "FeatureCollection",
+        features: wallHandles(ring, minM).map((h) => ({
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates: fromLocal(anchor, h.at) },
+          properties: { edge: h.edge, cursor: h.cursor, id },
+        })),
+      });
+    };
+
+    const moveDrag = (lngLat: { lng: number; lat: number }) => {
+      const drag = dragging.current;
+      if (!drag) return;
+      if (drag.kind === "wall") {
+        const s = useDraft.getState();
+        const anchor = s.doc.venue.anchor;
+        const others = (s.doc.units ?? [])
+          .filter((u) => u.levelId === s.levelId && u.id !== drag.id)
+          .map((u) => (u.geometry.coordinates[0] ?? []).map((c) => toLocal(anchor, c as LonLat)));
+        const moved = moveWall(drag.ring, drag.edge, toLocal(anchor, [lngLat.lng, lngLat.lat]), {
+          toleranceM: tolerance(SNAP_PX),
+          gridM: s.snapping ? GRID_M : 0,
+          others,
+        });
+        if (!moved) return;
+        const ring = moved.ring.map((p) => fromLocal(anchor, p));
+        const openings = shiftOpenings(drag.openings, drag.ring, drag.edge, moved.offset).map(
+          (o) => ({ id: o.id, line: o.line.map((p) => fromLocal(anchor, p)) }),
+        );
+        drag.latest = { ring, openings, offset: moved.offset };
+        paintUnit(drag.id, ring);
+        paintOpenings(openings);
+        paintHandles(drag.id, moved.ring);
+        setPreview(
+          moved.guide
+            ? [
+                {
+                  type: "Feature",
+                  geometry: {
+                    type: "LineString",
+                    coordinates: moved.guide.map((p) => fromLocal(anchor, p)),
+                  },
+                  properties: { kind: "guide" },
+                },
+              ]
+            : [],
+        );
+        map.getCanvas().style.cursor = drag.cursor;
+        return;
+      }
+      if (drag.kind === "corner" || drag.kind === "room") {
+        const s = useDraft.getState();
+        const anchor = s.doc.venue.anchor;
+        const pointer = toLocal(anchor, [lngLat.lng, lngLat.lat]);
+        const opts = {
+          toleranceM: tolerance(SNAP_PX),
+          gridM: s.snapping ? GRID_M : 0,
+          others: (s.doc.units ?? [])
+            .filter((u) => u.levelId === s.levelId && u.id !== drag.id)
+            .map((u) => (u.geometry.coordinates[0] ?? []).map((c) => toLocal(anchor, c as LonLat))),
+        };
+        const moved =
+          drag.kind === "corner"
+            ? moveCorner(drag.ring, drag.corner, pointer, drag.openings, opts)
+            : moveRoom(
+                drag.ring,
+                drag.openings,
+                [pointer[0] - drag.origin[0], pointer[1] - drag.origin[1]],
+                opts,
+              );
+        if (!moved) return;
+        const ring = moved.ring.map((p) => fromLocal(anchor, p));
+        const openings = moved.openings.map((o) => ({
+          id: o.id,
+          line: o.line.map((p) => fromLocal(anchor, p)),
+        }));
+        drag.latest = { ring, openings, offset: moved.distance };
+        paintUnit(drag.id, ring);
+        paintOpenings(openings);
+        paintHandles(drag.id, moved.ring);
+        const guides = "guides" in moved ? moved.guides : moved.guide ? [moved.guide] : [];
+        setPreview(
+          guides.map((guide) => ({
+            type: "Feature" as const,
+            geometry: {
+              type: "LineString" as const,
+              coordinates: guide.map((p) => fromLocal(anchor, p)),
+            },
+            properties: { kind: "guide" },
+          })),
+        );
+        map.getCanvas().style.cursor = drag.kind === "corner" ? drag.cursor : "grabbing";
+        return;
+      }
+      if (drag.kind !== "fixture") {
+        setPreview([point([lngLat.lng, lngLat.lat], "drag")]);
+        return;
+      }
+      const dx = lngLat.lng - drag.origin[0];
+      const dy = lngLat.lat - drag.origin[1];
+      const coordinates = drag.rings.map((ring) =>
+        ring.map(([lon, lat]) => [lon + dx, lat + dy] as Position),
+      );
+      const collections = toCollections(useDraft.getState().doc);
+      (map.getSource(SOURCE.fixtures) as GeoJSONSource).setData({
+        type: "FeatureCollection",
+        features: collections.fixtures.features.map((feature) =>
+          feature.properties?.id === drag.id
+            ? { ...feature, geometry: { type: "Polygon" as const, coordinates } }
+            : feature,
+        ),
+      });
+    };
+    const finishDrag = (lngLat: { lng: number; lat: number }) => {
+      const drag = dragging.current;
+      if (!drag) return;
+      dragging.current = null;
+      map.dragPan.enable();
+      map.getCanvas().style.cursor = "";
+      setPreview([]);
+      const at: Position = [lngLat.lng, lngLat.lat];
+      if (drag.kind === "poi") useDraft.getState().updatePoi(drag.id, { position: at });
+      else if (drag.kind === "pano") props.current.onMovePano(drag.id, at);
+      else if (drag.kind === "fixture") {
+        const dx = lngLat.lng - drag.origin[0];
+        const dy = lngLat.lat - drag.origin[1];
+        useDraft.getState().updateFixture(drag.id, {
+          geometry: {
+            type: "Polygon",
+            coordinates: drag.rings.map((ring) =>
+              ring.map(([lon, lat]) => [lon + dx, lat + dy] as Position),
+            ),
+          },
+        });
+      } else if (drag.kind === "wall" || drag.kind === "corner" || drag.kind === "room") {
+        const latest = drag.latest;
+        if (latest && Math.abs(latest.offset) >= 0.02) {
+          useDraft.getState().resizeUnit(drag.id, latest.ring, latest.openings);
+        } else {
+          const collections = toCollections(useDraft.getState().doc);
+          (map.getSource(SOURCE.units) as GeoJSONSource).setData(collections.units);
+          (map.getSource(SOURCE.openings) as GeoJSONSource).setData(collections.openings);
+          (map.getSource(HANDLES) as GeoJSONSource | undefined)?.setData(handlesRef.current());
+        }
+      }
+      ignoreClicksUntil = performance.now() + 250;
+    };
+    const startWallDrag = (edge: number, cursor: string, preventDefault: () => void) => {
+      const s = useDraft.getState();
+      if (s.tool !== "select" || !props.current.canEdit) return;
+      const unit = s.doc.units?.find((u) => u.id === s.selectedId && u.levelId === s.levelId);
+      const ringLon = unit?.geometry.coordinates[0];
+      if (!unit || !ringLon) return;
+      preventDefault();
+      const anchor = s.doc.venue.anchor;
+      dragging.current = {
+        kind: "wall",
+        id: unit.id,
+        edge,
+        ring: ringLon.map((c) => toLocal(anchor, c as LonLat)),
+        openings: (s.doc.openings ?? [])
+          .filter((o) => o.levelId === s.levelId)
+          .map((o) => ({
+            id: o.id,
+            line: o.geometry.coordinates.map((c) => toLocal(anchor, c as LonLat)),
+          })),
+        cursor,
+        latest: null,
+      };
+      map.dragPan.disable();
+      map.getCanvas().style.cursor = cursor;
+    };
+    const roomGeometry = (id: string) => {
+      const s = useDraft.getState();
+      const unit = s.doc.units?.find((u) => u.id === id && u.levelId === s.levelId);
+      const ringLon = unit?.geometry.coordinates[0];
+      if (!unit || !ringLon) return null;
+      const anchor = s.doc.venue.anchor;
+      return {
+        anchor,
+        ring: ringLon.map((c) => toLocal(anchor, c as LonLat)),
+        openings: (s.doc.openings ?? [])
+          .filter((o) => o.levelId === s.levelId)
+          .map((o) => ({
+            id: o.id,
+            line: o.geometry.coordinates.map((c) => toLocal(anchor, c as LonLat)),
+          })),
+      };
+    };
+    const cornerUnder = (lngLat: { lng: number; lat: number }) => {
+      const s = useDraft.getState();
+      if (s.tool !== "select" || !s.selectedId) return null;
+      const geom = roomGeometry(s.selectedId);
+      if (!geom) return null;
+      return rectangleCorner(
+        geom.ring,
+        toLocal(geom.anchor, [lngLat.lng, lngLat.lat]),
+        tolerance(14),
+      );
+    };
+    let cornerHover = false;
+    const startCornerDrag = (corner: number, cursor: string, preventDefault: () => void) => {
+      const s = useDraft.getState();
+      if (!s.selectedId || !props.current.canEdit) return;
+      const geom = roomGeometry(s.selectedId);
+      if (!geom) return;
+      preventDefault();
+      dragging.current = {
+        kind: "corner",
+        id: s.selectedId,
+        corner,
+        ring: geom.ring,
+        openings: geom.openings,
+        cursor,
+        latest: null,
+      };
+      map.dragPan.disable();
+      map.getCanvas().style.cursor = cursor;
+    };
+    const startRoomDrag = (
+      id: string,
+      lngLat: { lng: number; lat: number },
+      preventDefault: () => void,
+    ) => {
+      if (!props.current.canEdit) return;
+      const geom = roomGeometry(id);
+      if (!geom) return;
+      preventDefault();
+      const s = useDraft.getState();
+      dragging.current = {
+        kind: "room",
+        id,
+        origin: toLocal(geom.anchor, [lngLat.lng, lngLat.lat]),
+        ring: geom.ring,
+        openings: geom.openings,
+        latest: null,
+      };
+      s.select(id);
+      map.dragPan.disable();
+      map.getCanvas().style.cursor = "grabbing";
+    };
+
     map.on("mousemove", (event: MapMouseEvent) => {
       const s = useDraft.getState();
       if (dragging.current) {
-        setPreview([point([event.lngLat.lng, event.lngLat.lat], "drag")]);
+        moveDrag(event.lngLat);
         return;
+      }
+      if (s.tool === "select" && props.current.canEdit) {
+        const corner = cornerUnder(event.lngLat);
+        if (corner) {
+          cornerHover = true;
+          map.getCanvas().style.cursor = corner.cursor;
+        } else if (cornerHover) {
+          cornerHover = false;
+          map.getCanvas().style.cursor = "";
+        }
       }
       if (s.tool === "rect" || s.tool === "stairs" || s.tool === "room") {
         const snapped = snap(event.lngLat);
@@ -416,9 +790,22 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
           } else s.addPoi(at);
           return;
         }
-        case "furniture":
-          s.addFurniture(at, planRotation());
+        case "furniture": {
+          // A tap on a piece already there selects it; a double tap switches to moving it.
+          const hit = map.queryRenderedFeatures(event.point, { layers: ["fixtures-fill"] })[0];
+          const fixtureId = hit?.properties?.id as string | undefined;
+          if (fixtureId) s.select(fixtureId);
+          else s.addFurniture(at, planRotation());
           return;
+        }
+        case "move": {
+          const layers = ["studio-panos-hit", "pois-hit", "fixtures-fill", "units-fill"].filter(
+            (l) => map.getLayer(l),
+          );
+          const hit = map.queryRenderedFeatures(event.point, { layers })[0];
+          s.select((hit?.properties?.id as string | undefined) ?? null);
+          return;
+        }
         case "stairs":
           s.addConnector(snap(event.lngLat).position);
           return;
@@ -463,37 +850,155 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       }
     });
 
-    // Drag points and panoramas with the select tool.
-    const startDrag = (kind: "poi" | "pano") => (event: MapLayerMouseEvent) => {
-      const s = useDraft.getState();
-      const id = event.features?.[0]?.properties?.id as string | undefined;
-      if (s.tool !== "select" || !id || !props.current.canEdit) return;
-      event.preventDefault();
-      dragging.current = { kind, id };
-      s.select(id);
-      map.dragPan.disable();
-      map.getCanvas().style.cursor = "grabbing";
-    };
+    // Select drags points and panoramas. Move drags those and furniture.
+    const startDrag =
+      (kind: "poi" | "pano" | "fixture") =>
+      (event: {
+        lngLat: { lng: number; lat: number };
+        features?: MapLayerMouseEvent["features"];
+        preventDefault: () => void;
+      }) => {
+        const s = useDraft.getState();
+        const id = event.features?.[0]?.properties?.id as string | undefined;
+        const allowed =
+          kind === "fixture" ? s.tool === "move" : s.tool === "select" || s.tool === "move";
+        if (!allowed || !id || !props.current.canEdit) return;
+        event.preventDefault();
+        if (kind === "fixture") {
+          const fixture = s.doc.fixtures?.find((f) => f.id === id);
+          if (!fixture) return;
+          dragging.current = {
+            kind,
+            id,
+            origin: [event.lngLat.lng, event.lngLat.lat],
+            rings: fixture.geometry.coordinates as Position[][],
+          };
+        } else dragging.current = { kind, id };
+        s.select(id);
+        map.dragPan.disable();
+        map.getCanvas().style.cursor = "grabbing";
+      };
     map.on("mousedown", "pois-hit", startDrag("poi"));
     map.on("mousedown", "studio-panos-hit", startDrag("pano"));
-    map.on("mouseup", (event: MapMouseEvent) => {
-      const drag = dragging.current;
-      if (!drag) return;
-      dragging.current = null;
-      map.dragPan.enable();
-      map.getCanvas().style.cursor = "";
-      setPreview([]);
-      const at: Position = [event.lngLat.lng, event.lngLat.lat];
-      if (drag.kind === "poi") useDraft.getState().updatePoi(drag.id, { position: at });
-      else props.current.onMovePano(drag.id, at);
-      ignoreClicksUntil = performance.now() + 250;
+    map.on("mousedown", "fixtures-fill", startDrag("fixture"));
+    map.on("mousedown", "wall-handles-hit", (event) => {
+      const corner = cornerUnder(event.lngLat);
+      if (corner) {
+        startCornerDrag(corner.corner, corner.cursor, () => event.preventDefault());
+        return;
+      }
+      const edge = Number(event.features?.[0]?.properties?.edge);
+      const cursor = String(event.features?.[0]?.properties?.cursor ?? "ew-resize");
+      if (!Number.isInteger(edge)) return;
+      startWallDrag(edge, cursor, () => event.preventDefault());
     });
-    for (const layer of ["pois-hit", "studio-panos-hit"]) {
+    map.on("mousedown", (event) => {
+      if (dragging.current || !props.current.canEdit) return;
+      const s = useDraft.getState();
+      if (s.tool === "select") {
+        const corner = cornerUnder(event.lngLat);
+        if (corner) startCornerDrag(corner.corner, corner.cursor, () => event.preventDefault());
+        return;
+      }
+      if (s.tool !== "move") return;
+      const layers = ["fixtures-fill", "pois-hit", "studio-panos-hit", "units-fill"].filter((l) =>
+        map.getLayer(l),
+      );
+      const hit = map.queryRenderedFeatures(event.point, { layers })[0];
+      if (hit?.layer.id === "units-fill" && hit.properties?.id) {
+        startRoomDrag(String(hit.properties.id), event.lngLat, () => event.preventDefault());
+      }
+    });
+    map.on("touchstart", (event) => {
+      const s = useDraft.getState();
+      if (s.tool === "select") {
+        const corner = cornerUnder(event.lngLat);
+        if (corner) {
+          startCornerDrag(corner.corner, corner.cursor, () => event.preventDefault());
+          return;
+        }
+        if (map.getLayer("wall-handles-hit")) {
+          const hit = map.queryRenderedFeatures(event.point, { layers: ["wall-handles-hit"] })[0];
+          const edge = Number(hit?.properties?.edge);
+          if (hit && Number.isInteger(edge)) {
+            startWallDrag(edge, String(hit.properties?.cursor ?? "ew-resize"), () =>
+              event.preventDefault(),
+            );
+            return;
+          }
+        }
+      }
+      if (s.tool === "move" && map.getLayer("units-fill")) {
+        const layers = ["fixtures-fill", "units-fill"].filter((l) => map.getLayer(l));
+        const hit = map.queryRenderedFeatures(event.point, { layers })[0];
+        if (hit?.layer.id === "units-fill" && hit.properties?.id) {
+          startRoomDrag(String(hit.properties.id), event.lngLat, () => event.preventDefault());
+          return;
+        }
+      }
+      if (s.tool !== "move" || !map.getLayer("fixtures-fill")) return;
+      const hit = map.queryRenderedFeatures(event.point, { layers: ["fixtures-fill"] })[0];
+      if (!hit?.properties?.id) return;
+      startDrag("fixture")({
+        lngLat: event.lngLat,
+        features: [hit],
+        preventDefault: () => event.preventDefault(),
+      });
+    });
+    map.on("mouseup", (event: MapMouseEvent) => finishDrag(event.lngLat));
+    map.on("touchend", (event) => {
+      if (event.lngLat) finishDrag(event.lngLat);
+    });
+    map.on("touchmove", (event) => {
+      const kind = dragging.current?.kind;
+      if (kind !== "fixture" && kind !== "wall" && kind !== "corner" && kind !== "room") return;
+      event.preventDefault();
+      moveDrag(event.lngLat);
+    });
+    map.on("dblclick", (event) => {
+      if (!props.current.canEdit) return;
+      const layers = ["fixtures-fill", "units-fill"].filter((l) => map.getLayer(l));
+      const hit = layers.length ? map.queryRenderedFeatures(event.point, { layers })[0] : undefined;
+      const id = hit?.properties?.id as string | undefined;
+      if (!id) return;
+      event.preventDefault();
+      const s = useDraft.getState();
+      s.setTool("move");
+      s.select(id);
+      ignoreClicksUntil = performance.now() + 300;
+    });
+    map.on("mouseenter", "wall-handles-hit", (event) => {
+      if (useDraft.getState().tool !== "select" || dragging.current) return;
+      map.getCanvas().style.cursor = String(event.features?.[0]?.properties?.cursor ?? "ew-resize");
+    });
+    map.on("mouseleave", "wall-handles-hit", () => {
+      if (dragging.current) return;
+      if (useDraft.getState().tool === "select") map.getCanvas().style.cursor = "";
+    });
+    map.on("dblclick", "wall-handles-hit", (event) => event.preventDefault());
+    map.on("mouseenter", "units-fill", () => {
+      if (useDraft.getState().tool === "move" && !dragging.current) {
+        map.getCanvas().style.cursor = "grab";
+      }
+    });
+    map.on("mouseleave", "units-fill", () => {
+      if (dragging.current) return;
+      if (useDraft.getState().tool === "move") map.getCanvas().style.cursor = "move";
+    });
+    map.on("zoomend", () => {
+      const kind = dragging.current?.kind;
+      if (kind === "wall" || kind === "corner" || kind === "room") return;
+      (map.getSource(HANDLES) as GeoJSONSource | undefined)?.setData(handlesRef.current());
+    });
+    for (const layer of ["pois-hit", "studio-panos-hit", "fixtures-fill"]) {
       map.on("mouseenter", layer, () => {
-        if (useDraft.getState().tool === "select") map.getCanvas().style.cursor = "grab";
+        const toolNow = useDraft.getState().tool;
+        if (toolNow === "select" || toolNow === "move") map.getCanvas().style.cursor = "grab";
       });
       map.on("mouseleave", layer, () => {
-        if (useDraft.getState().tool === "select") map.getCanvas().style.cursor = "";
+        const toolNow = useDraft.getState().tool;
+        if (toolNow === "move") map.getCanvas().style.cursor = "move";
+        else if (toolNow === "select") map.getCanvas().style.cursor = "";
       });
     }
 
@@ -514,46 +1019,60 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
   }, [dark]);
 
   // Document -> map sources and underlays.
+  // A click often writes a preview just before the new room, so isStyleLoaded() is briefly
+  // false. Skipping the update then leaves the shape only in the side panel until the next edit.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map?.isStyleLoaded()) return;
-    const collections = toCollections(doc);
-    (map.getSource(SOURCE.units) as GeoJSONSource | undefined)?.setData(collections.units);
-    (map.getSource(SOURCE.pois) as GeoJSONSource | undefined)?.setData(collections.pois);
-    (map.getSource(SOURCE.openings) as GeoJSONSource | undefined)?.setData(collections.openings);
-    (map.getSource(SOURCE.connectors) as GeoJSONSource | undefined)?.setData(
-      collections.connectors,
-    );
-    (map.getSource(SOURCE.paths) as GeoJSONSource | undefined)?.setData(collections.paths);
-    (map.getSource(SOURCE.zones) as GeoJSONSource | undefined)?.setData(collections.zones);
-    (map.getSource(SOURCE.fixtures) as GeoJSONSource | undefined)?.setData(collections.fixtures);
-    syncUnderlays(map, doc.underlays ?? [], useDraft.getState().levelId);
-    applyVisibility(map, useDraft.getState().hiddenLayers);
+    if (!map) return;
+    const sync = () => {
+      if (!map.getSource(SOURCE.units)) return false;
+      const collections = toCollections(doc);
+      (map.getSource(SOURCE.units) as GeoJSONSource).setData(collections.units);
+      (map.getSource(SOURCE.pois) as GeoJSONSource).setData(collections.pois);
+      (map.getSource(SOURCE.openings) as GeoJSONSource).setData(collections.openings);
+      (map.getSource(SOURCE.connectors) as GeoJSONSource).setData(collections.connectors);
+      (map.getSource(SOURCE.paths) as GeoJSONSource).setData(collections.paths);
+      (map.getSource(SOURCE.zones) as GeoJSONSource).setData(collections.zones);
+      (map.getSource(SOURCE.fixtures) as GeoJSONSource).setData(collections.fixtures);
+      syncUnderlays(map, doc.underlays ?? [], useDraft.getState().levelId);
+      applyVisibility(map, useDraft.getState().hiddenLayers);
+      return true;
+    };
+    return runWhenMapReady(map, sync);
   }, [doc]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map?.isStyleLoaded()) return;
-    (map.getSource(STUDIO_PANOS) as GeoJSONSource | undefined)?.setData(panoCollection(panos));
+    if (!map) return;
+    return runWhenMapReady(map, () => {
+      const source = map.getSource(STUDIO_PANOS) as GeoJSONSource | undefined;
+      if (!source) return false;
+      source.setData(panoCollection(panos));
+      return true;
+    });
   }, [panos]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map?.isStyleLoaded()) return;
-    for (const layer of [...LEVEL_FILTERED_LAYERS, ...DETAIL_LAYERS]) {
-      if (map.getLayer(layer)) map.setFilter(layer, levelFilter(layer, levelId));
-    }
-    for (const layer of [
-      "studio-panos",
-      "studio-panos-hit",
-      "pois-hit",
-      "connectors-hit",
-      "paths-hit",
-    ]) {
-      if (map.getLayer(layer)) map.setFilter(layer, onLevel(levelId));
-    }
-    syncUnderlays(map, useDraft.getState().doc.underlays ?? [], levelId);
-    applyVisibility(map, useDraft.getState().hiddenLayers);
+    if (!map) return;
+    return runWhenMapReady(map, () => {
+      if (!map.getLayer("units-fill")) return false;
+      for (const layer of [...LEVEL_FILTERED_LAYERS, ...DETAIL_LAYERS]) {
+        if (map.getLayer(layer)) map.setFilter(layer, levelFilter(layer, levelId));
+      }
+      for (const layer of [
+        "studio-panos",
+        "studio-panos-hit",
+        "pois-hit",
+        "connectors-hit",
+        "paths-hit",
+      ]) {
+        if (map.getLayer(layer)) map.setFilter(layer, onLevel(levelId));
+      }
+      syncUnderlays(map, useDraft.getState().doc.underlays ?? [], levelId);
+      applyVisibility(map, useDraft.getState().hiddenLayers);
+      return true;
+    });
   }, [levelId]);
 
   useEffect(() => {
@@ -564,7 +1083,9 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       tool === "room" ? "polygon" : tool === "path" ? "linestring" : "static",
     );
     const canvas = map?.getCanvas();
-    if (canvas) canvas.style.cursor = tool === "select" ? "" : "crosshair";
+    if (canvas) {
+      canvas.style.cursor = tool === "select" ? "" : tool === "move" ? "move" : "crosshair";
+    }
   }, [tool]);
 
   useEffect(() => {
@@ -581,6 +1102,43 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       if (map.getLayer(layer)) map.setFilter(layer, byId(selectedId));
     }
   }, [selectedId]);
+
+  handlesRef.current = () => {
+    const map = mapRef.current;
+    const s = useDraft.getState();
+    if (!map || s.tool !== "select" || !props.current.canEdit) return EMPTY;
+    const unit = s.doc.units?.find((u) => u.id === s.selectedId && u.levelId === s.levelId);
+    const ringLon = unit?.geometry.coordinates[0];
+    if (!unit || !ringLon) return EMPTY;
+    const anchor = s.doc.venue.anchor;
+    const ring = ringLon.map((c) => toLocal(anchor, c as LonLat));
+    const minM = metersPerPixel(map.getCenter().lat, map.getZoom()) * 28;
+    return {
+      type: "FeatureCollection",
+      features: wallHandles(ring, minM).map((h) => ({
+        type: "Feature" as const,
+        geometry: { type: "Point" as const, coordinates: fromLocal(anchor, h.at) },
+        properties: { edge: h.edge, cursor: h.cursor, id: unit.id },
+      })),
+    };
+  };
+
+  // Midpoint handles on the selected room. Hidden while a wall drag paints its own.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const show =
+      tool === "select" &&
+      doc.units?.some((u) => u.id === selectedId && u.levelId === levelId) === true;
+    return runWhenMapReady(map, () => {
+      const source = map.getSource(HANDLES) as GeoJSONSource | undefined;
+      if (!source) return false;
+      const kind = dragging.current?.kind;
+      if (kind === "wall" || kind === "corner" || kind === "room") return true;
+      source.setData(show ? handlesRef.current() : EMPTY);
+      return true;
+    });
+  }, [doc, selectedId, tool, levelId]);
 
   // The selected tour as visitors will walk it (current floor), stops numbered.
   useEffect(() => {
@@ -615,11 +1173,14 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map?.isStyleLoaded()) return;
-    // Re-show underlays of the current level before hiding what the user switched off.
-    const s = useDraft.getState();
-    syncUnderlays(map, s.doc.underlays ?? [], s.levelId);
-    applyVisibility(map, hiddenLayers);
+    if (!map) return;
+    return runWhenMapReady(map, () => {
+      if (!map.getLayer("units-fill")) return false;
+      const s = useDraft.getState();
+      syncUnderlays(map, s.doc.underlays ?? [], s.levelId);
+      applyVisibility(map, hiddenLayers);
+      return true;
+    });
   }, [hiddenLayers]);
 
   useEffect(() => {
@@ -636,6 +1197,18 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       <div ref={containerRef} className="h-full w-full" />
     </div>
   );
+}
+
+/** Run once sources exist. `isStyleLoaded()` flickers false after a preview update, so it is not the signal. */
+function runWhenMapReady(map: MapLibreMap, run: () => boolean) {
+  if (run()) return;
+  const retry = () => {
+    if (run()) map.off("idle", retry);
+  };
+  map.on("idle", retry);
+  return () => {
+    map.off("idle", retry);
+  };
 }
 
 function applyVisibility(map: MapLibreMap, hidden: LayerGroup[]) {

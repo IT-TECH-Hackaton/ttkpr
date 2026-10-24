@@ -318,12 +318,22 @@ function RoomSize({
 
 function FixturePanel({ id }: { id: string }) {
   const fixture = useDraft((s) => s.doc.fixtures?.find((f) => f.id === id));
+  const { updateFixture } = useDraft.getState();
   if (!fixture) return null;
   return (
     <Section title="Мебель">
-      <p className="text-sm">{fixture.name ?? "Предмет"}</p>
+      <Field label="Название" htmlFor="fixture-name">
+        <input
+          id="fixture-name"
+          className={field}
+          value={fixture.name ?? ""}
+          placeholder="Без подписи на плане"
+          onChange={(e) => updateFixture(fixture.id, { name: e.target.value || null })}
+        />
+      </Field>
       <p className="text-xs text-muted">
-        {fixture.obstacle === false ? "Маршруты проходят рядом." : "Маршруты обходят его стороной."}
+        {fixture.obstacle === false ? "Маршруты проходят рядом." : "Маршруты обходят его стороной."}{" "}
+        На плане подпись не показывается.
       </p>
       <DeleteButton id={fixture.id} />
     </Section>
