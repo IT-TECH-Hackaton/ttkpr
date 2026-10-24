@@ -18,6 +18,7 @@ import {
   planLayers,
   type Route,
   SOURCE,
+  syncRoomIcons,
   syncUnderlays,
   toCollections,
   treeCrowns,
@@ -144,7 +145,9 @@ export function PlanMap({
       map.addSource(SOURCE.paths, { type: "geojson", data: collections.paths });
       map.addSource(SOURCE.zones, { type: "geojson", data: collections.zones });
       map.addSource(SOURCE.fixtures, { type: "geojson", data: collections.fixtures });
+      map.addSource(SOURCE.roomIcons, { type: "geojson", data: collections.roomIcons });
       addConnectorIcons(map);
+      syncRoomIcons(map, bundle.units ?? []);
       for (const layer of planLayers(initialLevel.current)) map.addLayer(layer);
       // Furniture and zones inside rooms, under walkways and markers.
       for (const layer of detailLayers(initialLevel.current)) map.addLayer(layer, "paths");

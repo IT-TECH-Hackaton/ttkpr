@@ -31,6 +31,7 @@ import { scalePoint } from "../lib/scalePlan";
 import { useDraft } from "../store";
 import { CaptureQrDialog } from "./CaptureQrDialog";
 import { PlanImportDialog } from "./PlanImportDialog";
+import { RoomIconField } from "./RoomIconField";
 import { RouteCheck } from "./RouteCheck";
 
 const PanoPlacer = lazy(() => import("./PanoPlacer"));
@@ -238,6 +239,7 @@ function UnitPanel({ id, mapId, panos }: { id: string; mapId: string; panos: Pan
           ))}
         </select>
       </Field>
+      <RoomIconField unitId={unit.id} />
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
@@ -694,11 +696,11 @@ function OverviewPanel({ panos, mapId }: { panos: PanoramaOut[]; mapId: string }
             «Распознать план из файла»: PDF или картинка — помещения, двери, лестницы и этажи
             появятся сами. Или загрузите схему подложкой и рисуйте поверх.
           </li>
-          <li>«Комната»: два клика по углам — следующая прилипнет к соседней.</li>
-          <li>«Дверь»: наведите на стену и кликните.</li>
-          <li>«Точка»: выберите категорию в стрелке и расставляйте подряд.</li>
-          <li>«Дорожка»: соедините входы зданий через двор или улицу.</li>
-          <li>«Панорама»: клик в месте съёмки → QR для телефона.</li>
+          <li>«Комната» (3): два клика по углам — следующая прилипнет к соседней.</li>
+          <li>«Дверь» (5): наведите на стену и кликните.</li>
+          <li>«Точка» (7): выберите категорию в стрелке и расставляйте подряд.</li>
+          <li>«Дорожка» (9): соедините входы зданий через двор или улицу.</li>
+          <li>«Панорама» (0): клик в месте съёмки → QR для телефона.</li>
           <li>«Маршруты для гостей»: экскурсия по точкам со ссылкой и QR.</li>
           <li>Нажмите «Опубликовать».</li>
         </ol>

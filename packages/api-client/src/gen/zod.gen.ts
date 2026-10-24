@@ -763,6 +763,8 @@ export const zUnit = z.object({
     access: zUnitAccess.optional().default('public'),
     heightM: z.number().gte(1.5).lte(50).nullish(),
     color: z.string().max(7).regex(/^#[0-9A-Fa-f]{6}$/).nullish(),
+    icon: z.string().regex(/^[a-z0-9-]{1,40}:[a-z0-9-]{1,80}$/).nullish(),
+    iconSvg: z.string().min(20).max(12000).nullish(),
     description: z.string().min(1).max(2000).nullish(),
     photos: z.array(z.string().max(2048).regex(/^(https:\/\/[^\s\/?#<>\"'`\\@:]+(:[0-9]{1,5})?([\/?#][^\s<>\"'`\\]*)?|\/media\/[A-Za-z0-9._~\/-]+)$/)).max(10).optional(),
     capacity: z.int().gte(1).lte(1000000).nullish(),

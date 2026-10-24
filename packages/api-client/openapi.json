@@ -4778,6 +4778,33 @@
             "title": "Color",
             "description": "Fill on the plan"
           },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9-]{1,40}:[a-z0-9-]{1,80}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon",
+            "description": "Iconify id drawn in the room, e.g. mdi:toilet"
+          },
+          "iconSvg": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 12000,
+                "minLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iconsvg",
+            "description": "White SVG cached with the icon, so visitors never call Iconify"
+          },
           "description": {
             "anyOf": [
               {

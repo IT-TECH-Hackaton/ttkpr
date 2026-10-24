@@ -35,11 +35,11 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { FURNITURE } from "../../lib/furniture";
 import { localMapLink } from "../../lib/links";
-import { fitTo, zoomIn, zoomOut } from "../../lib/mapView";
+import { fitTo, gridSizeLabel, subscribeView, zoomIn, zoomOut } from "../../lib/mapView";
 import { can, ROLE_LABELS } from "../../lib/permissions";
 import { type DoorType, type LayerGroup, type SaveState, type Tool, useDraft } from "../../store";
 import { MenuDivider, MenuItem, Popover } from "../Popover";
@@ -62,15 +62,23 @@ export const TOOLS: ToolDef[] = [
   {
     id: "select",
     label: "Выбор",
-    key: "V",
+    key: "1",
     icon: <MousePointer2 />,
     hint: "Клик — выбрать. Точки на стенах и угол меняют размер",
     needs: "capture",
   },
   {
+    id: "move",
+    label: "Перемещение",
+    key: "2",
+    icon: <Move />,
+    hint: "Перетащите комнату, мебель, точку или панораму",
+    needs: "edit",
+  },
+  {
     id: "rect",
     label: "Комната",
-    key: "R",
+    key: "3",
     icon: <Square />,
     hint: "Два клика по углам. Двойной клик включает перемещение",
     needs: "edit",
@@ -78,7 +86,7 @@ export const TOOLS: ToolDef[] = [
   {
     id: "room",
     label: "Контур",
-    key: "P",
+    key: "4",
     icon: <Pentagon />,
     hint: "Помещение любой формы: клики по углам, замкнуть на первой точке",
     needs: "edit",
@@ -86,7 +94,7 @@ export const TOOLS: ToolDef[] = [
   {
     id: "door",
     label: "Дверь",
-    key: "D",
+    key: "5",
     icon: <DoorOpen />,
     hint: "Клик по стене — дверь встанет вдоль неё",
     needs: "edit",
@@ -94,7 +102,7 @@ export const TOOLS: ToolDef[] = [
   {
     id: "stairs",
     label: "Лестница/лифт",
-    key: "S",
+    key: "6",
     icon: <Footprints />,
     hint: "Клик — связь с этажом выше",
     needs: "edit",
@@ -102,7 +110,7 @@ export const TOOLS: ToolDef[] = [
   {
     id: "poi",
     label: "Точка",
-    key: "M",
+    key: "7",
     icon: <MapPin />,
     hint: "Клик — точка выбранной категории, можно ставить подряд",
     needs: "edit",
@@ -110,23 +118,15 @@ export const TOOLS: ToolDef[] = [
   {
     id: "furniture",
     label: "Мебель",
-    key: "F",
+    key: "8",
     icon: <Armchair />,
     hint: "Клик — стол, диван, стенд или растение. Двойной клик или двойное нажатие включает перемещение",
     needs: "edit",
   },
   {
-    id: "move",
-    label: "Перемещение",
-    key: "G",
-    icon: <Move />,
-    hint: "Перетащите комнату, мебель, точку или панораму",
-    needs: "edit",
-  },
-  {
     id: "path",
     label: "Дорожка",
-    key: "W",
+    key: "9",
     icon: <Route />,
     hint: "Клики по изгибам дорожки, двойной клик — готово. Соединяет входы зданий через улицу",
     needs: "edit",
@@ -134,7 +134,7 @@ export const TOOLS: ToolDef[] = [
   {
     id: "pano",
     label: "Панорама",
-    key: "C",
+    key: "0",
     icon: <Camera />,
     hint: "Клик в месте съёмки — дальше QR для телефона",
     needs: "capture",
@@ -656,6 +656,28 @@ export function LayersButton() {
   );
 }
 
+/** Cell side of the background grid, just above the help button. */
+export function GridReadout() {
+  const [text, setText] = useState<string | null>(null);
+  useEffect(() => {
+    const read = () => setText(gridSizeLabel());
+    read();
+    return subscribeView(read);
+  }, []);
+  if (!text) return null;
+  return (
+    <p
+      className={cn(
+        "pointer-events-none rounded-lg bg-slate-900/80 px-2.5 py-1",
+        "text-xs font-medium text-white tabular-nums",
+      )}
+      title="Сторона клетки сетки"
+    >
+      {text}
+    </p>
+  );
+}
+
 export function HistoryAndHelp({ onOpenHelp }: { onOpenHelp: () => void }) {
   const { undo, redo, pastStates, futureStates } = useStore(useDraft.temporal);
   return (
@@ -743,16 +765,16 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
             Есть схема здания? Загрузите её кнопкой с картинкой на панели — она ляжет подложкой.
           </li>
           <li>
-            «Комната» (R): два клика по углам. Углы прилипают к соседним комнатам — стены совпадут.
+            «Комната» (3): два клика по углам. Углы прилипают к соседним комнатам — стены совпадут.
           </li>
           <li>
-            «Дверь» (D): наведите на стену — появится жёлтая дверь, кликните. Тип — в стрелке рядом.
+            «Дверь» (5): наведите на стену — появится жёлтая дверь, кликните. Тип — в стрелке рядом.
           </li>
-          <li>«Лестница/лифт» (S): клик — связь с этажом выше (этаж добавится сам).</li>
+          <li>«Лестница/лифт» (6): клик — связь с этажом выше (этаж добавится сам).</li>
           <li>
-            «Точка» (M): выберите категорию и ставьте точки подряд, названия — в панели справа.
+            «Точка» (7): выберите категорию и ставьте точки подряд, названия — в панели справа.
           </li>
-          <li>«Панорама» (C): клик в месте съёмки, отсканируйте QR телефоном и снимайте.</li>
+          <li>«Панорама» (0): клик в месте съёмки, отсканируйте QR телефоном и снимайте.</li>
           <li>«Опубликовать» — посетители увидят карту по постоянной ссылке.</li>
         </ol>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">

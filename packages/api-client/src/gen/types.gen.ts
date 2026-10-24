@@ -1501,6 +1501,18 @@ export type Unit = {
      */
     color?: string | null;
     /**
+     * Icon
+     *
+     * Iconify id drawn in the room, e.g. mdi:toilet
+     */
+    icon?: string | null;
+    /**
+     * Iconsvg
+     *
+     * White SVG cached with the icon, so visitors never call Iconify
+     */
+    iconSvg?: string | null;
+    /**
      * Description
      */
     description?: string | null;

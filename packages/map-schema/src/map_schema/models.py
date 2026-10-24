@@ -154,6 +154,17 @@ def _line(max_length: int) -> Any:
     return StringConstraints(strip_whitespace=True, min_length=1, max_length=max_length)
 
 
+def _icon_svg(value: str) -> str:
+    text = value.strip()
+    if text.startswith("<?xml"):
+        text = text.split("?>", 1)[-1].strip()
+    if not (text.startswith("<svg") and text.endswith("</svg>")):
+        raise PydanticCustomError("map_icon", "Иконка должна быть изображением SVG")
+    if re.search(r"<script|javascript:|foreignObject|on[a-zA-Z]+\s*=", text):
+        raise PydanticCustomError("map_icon", "В иконке не должно быть скриптов")
+    return text
+
+
 Name = Annotated[str, _line(120), _Check(_inline)]
 ShortText = Annotated[str, _line(200), _Check(_inline)]
 Hours = Annotated[str, _line(120), _Check(_inline)]
@@ -161,6 +172,16 @@ Tag = Annotated[str, _line(40), _Check(_inline)]
 Description = Annotated[str, _line(2000), _Check(_multiline)]
 ShortDescription = Annotated[str, _line(1000), _Check(_multiline)]
 AnnouncementText = Annotated[str, _line(500), _Check(_multiline)]
+
+IconId = Annotated[
+    str,
+    _Pattern(
+        r"^[a-z0-9-]{1,40}:[a-z0-9-]{1,80}$",
+        "map_icon",
+        "Неизвестная иконка",
+    ),
+]
+IconSvg = Annotated[str, StringConstraints(min_length=20, max_length=12000), _Check(_icon_svg)]
 
 OptName = Annotated[Name | None, BeforeValidator(_blank_to_none)]
 OptShortText = Annotated[ShortText | None, BeforeValidator(_blank_to_none)]
@@ -620,6 +641,16 @@ class Unit(CamelModel):
         description="Ceiling height; level height if unset",
     )
     color: OptColor = Field(None, exclude_if=_is_none, description="Fill on the plan")
+    icon: IconId | None = Field(
+        None,
+        exclude_if=_is_none,
+        description="Iconify id drawn in the room, e.g. mdi:toilet",
+    )
+    icon_svg: IconSvg | None = Field(
+        None,
+        exclude_if=_is_none,
+        description="White SVG cached with the icon, so visitors never call Iconify",
+    )
     description: OptDescription = Field(None, exclude_if=_is_none)
     photos: list[ImageUrl] = Field(default_factory=list, max_length=10, exclude_if=_is_empty)
     capacity: int | None = Field(None, ge=1, le=1_000_000, exclude_if=_is_none)

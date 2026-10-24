@@ -1,11 +1,32 @@
 import { fromLocal, type LonLat, toLocal } from "@ttkpr/map-core";
 import type { Map as MapLibreMap } from "maplibre-gl";
+import { formatGridSize, gridCellMeters } from "./grid";
+import { metersPerPixel } from "./snap";
 
 // The editor map registers itself so panels can place things relative to the current view.
 let current: MapLibreMap | null = null;
+const viewListeners = new Set<() => void>();
 
 export function registerMap(map: MapLibreMap | null) {
   current = map;
+  notifyView();
+}
+
+/** Fired when the editor map pans or zooms, and when it is created or destroyed. */
+export function notifyView() {
+  for (const listener of viewListeners) listener();
+}
+
+export function subscribeView(listener: () => void): () => void {
+  viewListeners.add(listener);
+  return () => viewListeners.delete(listener);
+}
+
+/** Side of the background square at the current zoom, before the map exists — null. */
+export function gridSizeLabel(): string | null {
+  if (!current) return null;
+  const center = current.getCenter();
+  return formatGridSize(gridCellMeters(metersPerPixel(center.lat, current.getZoom())));
 }
 
 /** Zoom controls of the editor chrome. */

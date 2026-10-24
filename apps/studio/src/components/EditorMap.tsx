@@ -15,6 +15,7 @@ import {
   PLAN_FONT,
   planLayers,
   SOURCE,
+  syncRoomIcons,
   syncUnderlays,
   toCollections,
   toLocal,
@@ -37,7 +38,8 @@ import {
   TerraDrawRenderMode,
 } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
-import { cornersPlacement, registerMap } from "../lib/mapView";
+import { gridCellMeters, gridLineColor, gridLines } from "../lib/grid";
+import { cornersPlacement, notifyView, registerMap } from "../lib/mapView";
 import {
   moveCorner,
   moveRoom,
@@ -54,6 +56,7 @@ const STUDIO_PANOS = "studio-panos";
 const TOUR = "studio-tour";
 const PREVIEW = "draft-preview";
 const HANDLES = "draft-handles";
+const GRID = "plan-grid";
 const SNAP_PX = 12;
 const DOOR_PX = 28;
 const GRID_M = 0.5;
@@ -63,12 +66,16 @@ const LAYER_GROUPS: Record<LayerGroup, string[]> = {
   rooms: [
     "units-fill",
     "units-outline",
+    "units-icon",
+    "units-icon-glyph",
     "selected-unit",
     "wall-handles",
     "wall-handles-hit",
     ...DETAIL_LAYERS,
+    "selected-fixture-fill",
+    "selected-fixture",
   ],
-  labels: ["units-label", "pois-label", "connectors-label"],
+  labels: ["units-label", "units-icon-label", "pois-label", "connectors-label"],
   doors: ["openings", "selected-opening", "paths", "paths-hit", "selected-path"],
   connectors: ["connectors", "connectors-label", "selected-connector", "connectors-hit"],
   points: ["pois", "pois-label", "pois-hit", "selected-poi"],
@@ -114,7 +121,7 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
   const drawRef = useRef<TerraDraw | null>(null);
   const rectStart = useRef<LonLat | null>(null);
   const dragging = useRef<
-    | { kind: "poi" | "pano"; id: string }
+    | { kind: "poi" | "pano"; id: string; origin?: Position }
     | { kind: "fixture"; id: string; origin: Position; rings: Position[][] }
     | {
         kind: "wall";
@@ -228,6 +235,33 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       );
     };
 
+    const syncGrid = () => {
+      notifyView();
+      const source = map.getSource(GRID) as GeoJSONSource | undefined;
+      if (!source) return;
+      const bounds = map.getBounds();
+      const step = gridCellMeters(metersPerPixel(map.getCenter().lat, map.getZoom()));
+      source.setData(
+        gridLines(
+          useDraft.getState().doc.venue.anchor,
+          bounds.getWest(),
+          bounds.getSouth(),
+          bounds.getEast(),
+          bounds.getNorth(),
+          step,
+        ),
+      );
+    };
+    let gridFrame = 0;
+    const onMove = () => {
+      if (gridFrame) return;
+      gridFrame = requestAnimationFrame(() => {
+        gridFrame = 0;
+        syncGrid();
+      });
+    };
+    map.on("move", onMove);
+
     map.on("load", () => {
       const collections = toCollections(initial.doc);
       map.addSource(SOURCE.units, { type: "geojson", data: collections.units });
@@ -238,9 +272,11 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       map.addSource(SOURCE.paths, { type: "geojson", data: collections.paths });
       map.addSource(SOURCE.zones, { type: "geojson", data: collections.zones });
       map.addSource(SOURCE.fixtures, { type: "geojson", data: collections.fixtures });
+      map.addSource(SOURCE.roomIcons, { type: "geojson", data: collections.roomIcons });
       map.addSource(STUDIO_PANOS, { type: "geojson", data: EMPTY });
       map.addSource(PREVIEW, { type: "geojson", data: EMPTY });
       map.addSource(HANDLES, { type: "geojson", data: EMPTY });
+      map.addSource(GRID, { type: "geojson", data: EMPTY });
       map.addSource(TOUR, { type: "geojson", data: EMPTY });
 
       // The bundle's pano layer is replaced by live panoramas from the API.
@@ -248,7 +284,34 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       for (const layer of planLayers(initial.levelId)) {
         if (layer.id !== "panos") map.addLayer(layer);
       }
+      // Over the room fill and under the outline, so the square stays readable inside a room.
+      map.addLayer(
+        {
+          id: GRID,
+          type: "line",
+          source: GRID,
+          paint: {
+            "line-color": gridLineColor(darkRef.current),
+            "line-width": 1,
+          },
+        },
+        "units-outline",
+      );
       for (const layer of detailLayers(initial.levelId)) map.addLayer(layer, "paths");
+      map.addLayer({
+        id: "selected-fixture-fill",
+        type: "fill",
+        source: SOURCE.fixtures,
+        filter: byId(null),
+        paint: { "fill-color": "#38bdf8", "fill-opacity": 0.55 },
+      });
+      map.addLayer({
+        id: "selected-fixture",
+        type: "line",
+        source: SOURCE.fixtures,
+        filter: byId(null),
+        paint: { "line-color": "#38bdf8", "line-width": 4 },
+      });
       const level = onLevel(initial.levelId);
       const highlight = (id: string, source: string, type: "line" | "circle", color: string) =>
         map.addLayer(
@@ -437,6 +500,7 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       });
       drawRef.current = draw;
       syncUnderlays(map, initial.doc.underlays ?? [], initial.levelId);
+      syncGrid();
     });
 
     const paintUnit = (id: string, ring: Position[]) => {
@@ -454,6 +518,17 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
             : feature,
         ),
       });
+      const doc = useDraft.getState().doc;
+      (map.getSource(SOURCE.roomIcons) as GeoJSONSource | undefined)?.setData(
+        toCollections({
+          ...doc,
+          units: doc.units?.map((u) =>
+            u.id === id
+              ? { ...u, geometry: { type: "Polygon" as const, coordinates: [ring, ...holes] } }
+              : u,
+          ),
+        }).roomIcons,
+      );
     };
     const paintOpenings = (moved: { id: string; line: Position[] }[]) => {
       const byId = new Map(moved.map((o) => [o.id, o.line]));
@@ -592,8 +667,13 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       map.getCanvas().style.cursor = "";
       setPreview([]);
       const at: Position = [lngLat.lng, lngLat.lat];
-      if (drag.kind === "poi") useDraft.getState().updatePoi(drag.id, { position: at });
-      else if (drag.kind === "pano") props.current.onMovePano(drag.id, at);
+      if (drag.kind === "poi") {
+        const origin = drag.origin;
+        const start = origin ? map.project(origin) : null;
+        const end = map.project(at);
+        const nudged = start ? Math.hypot(end.x - start.x, end.y - start.y) < 6 : false;
+        if (!nudged) useDraft.getState().updatePoi(drag.id, { position: at });
+      } else if (drag.kind === "pano") props.current.onMovePano(drag.id, at);
       else if (drag.kind === "fixture") {
         const dx = lngLat.lng - drag.origin[0];
         const dy = lngLat.lat - drag.origin[1];
@@ -613,6 +693,9 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
           const collections = toCollections(useDraft.getState().doc);
           (map.getSource(SOURCE.units) as GeoJSONSource).setData(collections.units);
           (map.getSource(SOURCE.openings) as GeoJSONSource).setData(collections.openings);
+          (map.getSource(SOURCE.roomIcons) as GeoJSONSource | undefined)?.setData(
+            collections.roomIcons,
+          );
           (map.getSource(HANDLES) as GeoJSONSource | undefined)?.setData(handlesRef.current());
         }
       }
@@ -850,7 +933,7 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       }
     });
 
-    // Select drags points and panoramas. Move drags those and furniture.
+    // A click on a point only selects it. Dragging a point or furniture needs the move tool.
     const startDrag =
       (kind: "poi" | "pano" | "fixture") =>
       (event: {
@@ -861,7 +944,7 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
         const s = useDraft.getState();
         const id = event.features?.[0]?.properties?.id as string | undefined;
         const allowed =
-          kind === "fixture" ? s.tool === "move" : s.tool === "select" || s.tool === "move";
+          kind === "pano" ? s.tool === "select" || s.tool === "move" : s.tool === "move";
         if (!allowed || !id || !props.current.canEdit) return;
         event.preventDefault();
         if (kind === "fixture") {
@@ -873,7 +956,13 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
             origin: [event.lngLat.lng, event.lngLat.lat],
             rings: fixture.geometry.coordinates as Position[][],
           };
-        } else dragging.current = { kind, id };
+        } else {
+          dragging.current = {
+            kind,
+            id,
+            origin: [event.lngLat.lng, event.lngLat.lat],
+          };
+        }
         s.select(id);
         map.dragPan.disable();
         map.getCanvas().style.cursor = "grabbing";
@@ -993,7 +1082,10 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
     for (const layer of ["pois-hit", "studio-panos-hit", "fixtures-fill"]) {
       map.on("mouseenter", layer, () => {
         const toolNow = useDraft.getState().tool;
-        if (toolNow === "select" || toolNow === "move") map.getCanvas().style.cursor = "grab";
+        const draggable =
+          toolNow === "move" || (layer === "studio-panos-hit" && toolNow === "select");
+        if (draggable) map.getCanvas().style.cursor = "grab";
+        else if (toolNow === "select") map.getCanvas().style.cursor = "pointer";
       });
       map.on("mouseleave", layer, () => {
         const toolNow = useDraft.getState().tool;
@@ -1003,6 +1095,8 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
     }
 
     return () => {
+      map.off("move", onMove);
+      if (gridFrame) cancelAnimationFrame(gridFrame);
       drawRef.current?.stop();
       drawRef.current = null;
       registerMap(null);
@@ -1014,8 +1108,18 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (map.isStyleLoaded()) applyPlanTheme(map, dark);
-    else map.once("load", () => applyPlanTheme(map, darkRef.current));
+    const paintGrid = (isDark: boolean) => {
+      if (map.getLayer(GRID)) map.setPaintProperty(GRID, "line-color", gridLineColor(isDark));
+    };
+    if (map.isStyleLoaded()) {
+      applyPlanTheme(map, dark);
+      paintGrid(dark);
+    } else {
+      map.once("load", () => {
+        applyPlanTheme(map, darkRef.current);
+        paintGrid(darkRef.current);
+      });
+    }
   }, [dark]);
 
   // Document -> map sources and underlays.
@@ -1034,8 +1138,12 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       (map.getSource(SOURCE.paths) as GeoJSONSource).setData(collections.paths);
       (map.getSource(SOURCE.zones) as GeoJSONSource).setData(collections.zones);
       (map.getSource(SOURCE.fixtures) as GeoJSONSource).setData(collections.fixtures);
+      (map.getSource(SOURCE.roomIcons) as GeoJSONSource | undefined)?.setData(
+        collections.roomIcons,
+      );
       syncUnderlays(map, doc.underlays ?? [], useDraft.getState().levelId);
       applyVisibility(map, useDraft.getState().hiddenLayers);
+      syncRoomIcons(map, doc.units ?? []);
       return true;
     };
     return runWhenMapReady(map, sync);
@@ -1095,6 +1203,8 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       "selected-unit",
       "selected-opening",
       "selected-poi",
+      "selected-fixture-fill",
+      "selected-fixture",
       "selected-connector",
       "selected-path",
       "studio-panos-selected",

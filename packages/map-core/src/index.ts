@@ -10,6 +10,7 @@ export * from "./orientation";
 export * from "./panos";
 export * from "./places";
 export * from "./plural";
+export * from "./roomIcons";
 export * from "./routing";
 export * from "./search";
 export * from "./slug";

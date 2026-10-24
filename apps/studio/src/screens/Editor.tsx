@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { EditorMap } from "../components/EditorMap";
 import {
+  GridReadout,
   HelpDialog,
   HistoryAndHelp,
   LayersButton,
@@ -176,9 +177,14 @@ function EditorLayout(props: LayoutProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [undo, redo, canEdit, map]);
 
-  // A new selection or panorama spot reopens the side panel.
+  // A new selection reopens the panel. Clicking empty ground clears it and closes the panel,
+  // instead of swapping the room for the map overview.
+  const openedFor = useRef<string | null>(selectedId ?? (panoSpot ? "pano-spot" : null));
   useEffect(() => {
-    if (selectedId || panoSpot) setInspectorOpen(true);
+    const current = selectedId ?? (panoSpot ? "pano-spot" : null);
+    if (current) setInspectorOpen(true);
+    else if (openedFor.current) setInspectorOpen(false);
+    openedFor.current = current;
   }, [selectedId, panoSpot]);
 
   const activeTool = TOOLS.find((t) => t.id === tool);
@@ -301,7 +307,10 @@ function EditorLayout(props: LayoutProps) {
           )}
           <Toolbar map={map} onUploadPlan={() => fileRef.current?.click()} />
         </div>
-        <HistoryAndHelp onOpenHelp={() => setHelp(true)} />
+        <div className="flex flex-col items-end gap-2">
+          <GridReadout />
+          <HistoryAndHelp onOpenHelp={() => setHelp(true)} />
+        </div>
       </div>
 
       <div className="pointer-events-none absolute bottom-24 left-3 max-md:hidden">

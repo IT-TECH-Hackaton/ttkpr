@@ -87,7 +87,14 @@ export function applyPlanTheme(map: MapLibreMap, dark: boolean) {
   set("landscape-crowns", "fill-outline-color", land.crownOutline);
   set("landscape-3d", "fill-extrusion-color", land.solid);
   set("units-label", "text-color", p.unitLabel);
-  for (const layer of ["units-label", "pois-label", "connectors-label", "route-marks-label"]) {
+  set("units-icon-label", "text-color", p.unitLabel);
+  for (const layer of [
+    "units-label",
+    "units-icon-label",
+    "pois-label",
+    "connectors-label",
+    "route-marks-label",
+  ]) {
     set(layer, "text-halo-color", p.halo);
   }
   set("pois-label", "text-color", p.poiLabel);
@@ -95,6 +102,9 @@ export function applyPlanTheme(map: MapLibreMap, dark: boolean) {
   for (const layer of ["pois", "panos", "connectors", "route-marks"]) {
     set(layer, "circle-stroke-color", p.markerStroke);
   }
+  // A blue badge with a white glyph: the room fill is too close to a dark circle in dark theme.
+  set("units-icon", "circle-color", dark ? "#3b82f6" : "#1d4ed8");
+  set("units-icon", "circle-stroke-color", "#ffffff");
   set("route-casing", "line-color", dark ? "#0b0f17" : "#ffffff");
   set("walls-3d", "fill-extrusion-color", dark ? "#475569" : "#cbd5e1");
   set("route-marks-label", "text-color", [

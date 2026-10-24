@@ -2,6 +2,8 @@ import type { Feature, FeatureCollection, LineString, Point, Polygon } from "geo
 import type { AddLayerObject, ExpressionSpecification, FilterSpecification } from "maplibre-gl";
 import type { MapBundle } from "./bundle";
 import { darkVariant } from "./color";
+import { labelPoint } from "./places";
+import { roomIconImageId } from "./roomIcons";
 
 export const SOURCE = {
   units: "plan-units",
@@ -14,6 +16,8 @@ export const SOURCE = {
   zones: "plan-zones",
   /** Furniture (tables, booths, a stage); layers: `detailLayers`. */
   fixtures: "plan-fixtures",
+  /** One point per room that has an icon. A circle layer on the polygon would mark every corner. */
+  roomIcons: "plan-room-icons",
 } as const;
 
 export const CONNECTOR_LABELS: Record<string, string> = {
@@ -46,6 +50,8 @@ interface PlanProps {
   kind?: string;
   /** Fixtures: routes go around it. */
   obstacle?: boolean;
+  /** Room badge image id. On the polygon it only shifts the name; the mark itself is a point. */
+  icon?: string;
 }
 
 export interface PlanCollections {
@@ -59,6 +65,7 @@ export interface PlanCollections {
   zones: FeatureCollection<Polygon, PlanProps>;
   /** `category` is the fixture kind. */
   fixtures: FeatureCollection<Polygon, PlanProps>;
+  roomIcons: FeatureCollection<Point, PlanProps>;
 }
 
 const colors = (color: string | null | undefined) =>
@@ -114,8 +121,31 @@ export function toCollections(bundle: MapBundle): PlanCollections {
           ...unitLabel(bundle, u),
           ...colors(u.color),
           ...restricted(u.access),
+          ...(u.icon && u.iconSvg ? { icon: roomIconImageId(u.icon) } : {}),
         },
       })),
+    ),
+    roomIcons: collection(
+      (bundle.units ?? []).flatMap((u) => {
+        if (!u.icon || !u.iconSvg) return [];
+        const at = labelPoint(bundle, u.geometry.coordinates);
+        if (!at) return [];
+        return [
+          {
+            type: "Feature" as const,
+            id: u.id,
+            geometry: { type: "Point" as const, coordinates: at },
+            properties: {
+              id: u.id,
+              levelId: u.levelId,
+              name: u.name ?? "",
+              category: u.category,
+              icon: roomIconImageId(u.icon),
+              ...unitLabel(bundle, u),
+            },
+          },
+        ];
+      }),
     ),
     openings: collection(
       (bundle.openings ?? []).map((o) => ({
@@ -346,6 +376,56 @@ export function planLayers(levelId: string): AddLayerObject[] {
       },
     },
     {
+      id: "units-icon",
+      type: "circle",
+      source: SOURCE.roomIcons,
+      filter: levelFilter("units-icon", levelId),
+      paint: {
+        "circle-radius": 13,
+        "circle-color": "#1d4ed8",
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2,
+      },
+    },
+    {
+      id: "units-icon-glyph",
+      type: "symbol",
+      source: SOURCE.roomIcons,
+      filter: levelFilter("units-icon-glyph", levelId),
+      layout: {
+        "icon-image": ["get", "icon"],
+        "icon-size": 0.78,
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true,
+        "icon-pitch-alignment": "viewport",
+      },
+    },
+    {
+      id: "units-icon-label",
+      type: "symbol",
+      source: SOURCE.roomIcons,
+      filter: levelFilter("units-icon-label", levelId),
+      layout: {
+        "text-field": ["case", ["to-boolean", ["get", "dupName"]], "", ["get", "name"]],
+        "text-font": PLAN_FONT,
+        "text-size": 12,
+        "text-max-width": 8,
+        // Badge outer edge is 14px from the centre. 1.6em of this 12px type is 19px,
+        // so the name sits about 5px off the badge — below it, or above when a place
+        // marker already occupies the middle of the room.
+        "text-anchor": ["case", ["to-boolean", ["get", "hasPoi"]], "bottom", "top"],
+        "text-offset": [
+          "case",
+          ["to-boolean", ["get", "hasPoi"]],
+          ["literal", [0, -1.6]],
+          ["literal", [0, 1.6]],
+        ],
+        "text-allow-overlap": true,
+        "text-ignore-placement": true,
+      },
+      paint: { "text-color": "#5b6577", "text-halo-color": "#ffffff", "text-halo-width": 1 },
+    },
+    {
       id: "units-label",
       type: "symbol",
       source: SOURCE.units,
@@ -353,10 +433,17 @@ export function planLayers(levelId: string): AddLayerObject[] {
       layout: {
         // A place inside the room has a marker in the middle: the room's name moves above it,
         // and is left out when the place carries the same name ("Гардероб" twice).
-        "text-field": ["case", ["to-boolean", ["get", "dupName"]], "", ["get", "name"]],
+        // A room with its own badge draws the name next to that badge instead.
+        "text-field": [
+          "case",
+          ["any", ["to-boolean", ["get", "dupName"]], ["has", "icon"]],
+          "",
+          ["get", "name"],
+        ],
         "text-font": PLAN_FONT,
         "text-size": 12,
         "text-max-width": 8,
+        "text-anchor": "center",
         "text-offset": [
           "case",
           ["to-boolean", ["get", "hasPoi"]],
@@ -455,6 +542,9 @@ export function planLayers(levelId: string): AddLayerObject[] {
 export const LEVEL_FILTERED_LAYERS = [
   "units-fill",
   "units-outline",
+  "units-icon",
+  "units-icon-glyph",
+  "units-icon-label",
   "paths",
   "openings",
   "units-label",
@@ -548,13 +638,25 @@ export const DETAIL_LAYERS = [
 export function levelFilter(layerId: string, levelId: string): FilterSpecification {
   const base = onLevel(levelId);
   // Corridors need no name; stairs and lifts have their own marker (see the legend).
-  return layerId === "units-label"
-    ? [
-        "all",
-        base,
-        ["!", ["in", ["get", "category"], ["literal", ["corridor", "stairs", "elevator"]]]],
-      ]
-    : base;
+  if (layerId === "units-label") {
+    return [
+      "all",
+      base,
+      ["!", ["in", ["get", "category"], ["literal", ["corridor", "stairs", "elevator"]]]],
+    ];
+  }
+  if (layerId === "units-icon" || layerId === "units-icon-glyph") {
+    return ["all", base, ["has", "icon"]];
+  }
+  if (layerId === "units-icon-label") {
+    return [
+      "all",
+      base,
+      ["has", "icon"],
+      ["!", ["in", ["get", "category"], ["literal", ["corridor", "stairs", "elevator"]]]],
+    ];
+  }
+  return base;
 }
 
 /** [[west, south], [east, north]] of all units, for fitBounds. */

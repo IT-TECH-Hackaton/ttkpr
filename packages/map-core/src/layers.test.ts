@@ -72,7 +72,15 @@ const doc: MapDocument = {
   levels: [{ id: "l1", name: "1 этаж", ordinal: 0 }],
   units: [
     { id: "plain", levelId: "l1", category: "hall", geometry: box(0, 0, 10, 10) },
-    { id: "pink", levelId: "l1", category: "room", color: "#ffc0cb", geometry: box(10, 0, 20, 10) },
+    {
+      id: "pink",
+      levelId: "l1",
+      category: "room",
+      color: "#ffc0cb",
+      icon: "mdi:toilet",
+      iconSvg: "<svg></svg>",
+      geometry: box(10, 0, 20, 10),
+    },
     {
       id: "staff",
       levelId: "l1",
@@ -180,7 +188,14 @@ describe("plan layers", () => {
     const c = toCollections(doc);
     const units = Object.fromEntries(c.units.features.map((f) => [f.properties.id, f.properties]));
     expect(units.plain).toEqual({ id: "plain", levelId: "l1", name: "", category: "hall" });
-    expect(units.pink).toMatchObject({ color: "#ffc0cb", colorDark: darkVariant("#ffc0cb") });
+    expect(units.pink).toMatchObject({
+      color: "#ffc0cb",
+      colorDark: darkVariant("#ffc0cb"),
+      icon: "room-mdi-toilet",
+    });
+    expect(c.roomIcons.features).toHaveLength(1);
+    expect(c.roomIcons.features[0]?.geometry.type).toBe("Point");
+    expect(c.roomIcons.features[0]?.properties.icon).toBe("room-mdi-toilet");
     expect(units.staff?.access).toBe("staff");
     const doors = Object.fromEntries(
       c.openings.features.map((f) => [f.properties.id, f.properties]),
