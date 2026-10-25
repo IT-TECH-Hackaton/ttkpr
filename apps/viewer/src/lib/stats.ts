@@ -33,7 +33,8 @@ if (typeof window !== "undefined") {
 
 /** Counts an event once per page view and key (re-renders and back-and-forth do not inflate it). */
 export function track(mapSlug: string, kind: StatKind, key = "") {
-  if (mapSlug === "demo") return;
+  // The built-in demo and the studio preview of a draft are not visits.
+  if (mapSlug === "demo" || new URLSearchParams(window.location.search).has("preview")) return;
   const id = `${mapSlug}|${kind}|${key}`;
   if (seen.has(id)) return;
   seen.add(id);

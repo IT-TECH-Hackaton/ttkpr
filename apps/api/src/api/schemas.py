@@ -54,6 +54,7 @@ class MapSummary(CamelModel):
     updated_at: datetime
     role: MemberRole = MemberRole.VIEWER
     permissions: list[str] = Field(default_factory=list, description="See api.permissions")
+    has_password: bool = False
 
 
 class MapUpdate(CamelModel):
@@ -63,8 +64,9 @@ class MapUpdate(CamelModel):
         pattern=SLUG_PATTERN,
         description="Short link /m/{slug}: 3-32 latin letters, digits and dashes",
     )
-    access_mode: AccessMode | None = Field(
-        None, description='"password" is not supported yet and is refused with 422'
+    access_mode: AccessMode | None = None
+    access_password: str | None = Field(
+        None, min_length=4, max_length=100, description='Required to switch to "password"'
     )
 
 
@@ -329,3 +331,13 @@ class ChatMessageOut(CamelModel):
 class ChatThreadOut(CamelModel):
     thread: uuid.UUID
     messages: list[ChatMessageOut]
+
+
+class MapUnlock(CamelModel):
+    password: str = Field(min_length=1, max_length=100)
+
+
+class VersionOut(CamelModel):
+    number: int
+    created_at: datetime
+    published: bool

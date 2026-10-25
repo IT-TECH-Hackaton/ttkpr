@@ -10,7 +10,14 @@ import type {
   Underlay,
   Unit,
 } from "@ttkpr/api-client";
-import { CONNECTOR_LABELS, categoryLabel, sortedLevels } from "@ttkpr/map-core";
+import {
+  CONNECTOR_LABELS,
+  categoryLabel,
+  fromLocal,
+  type LonLat,
+  sortedLevels,
+  toLocal,
+} from "@ttkpr/map-core";
 import { temporal } from "zundo";
 import { create } from "zustand";
 import { FURNITURE, furnitureAt } from "./lib/furniture";
@@ -112,6 +119,10 @@ interface DraftState {
   updateFixture: (id: string, patch: Partial<Fixture>) => void;
   remove: (id: string) => void;
   addLevel: () => void;
+  /** A new floor above with the current floor's rooms, doors and furniture (typical floors). */
+  copyLevel: () => void;
+  /** A copy next to the original, selected: rooms side by side, tables in a row. */
+  duplicate: (id: string) => void;
   updateLevel: (id: string, patch: Partial<Level>) => void;
   addUnderlay: (underlay: Omit<Underlay, "id" | "levelId">) => void;
   updateUnderlay: (id: string, patch: Partial<Underlay>) => void;
@@ -428,6 +439,87 @@ export const useDraft = create<DraftState>()(
             levelId: level.id,
             selectedId: null,
           };
+        }),
+      copyLevel: () =>
+        set((s) => {
+          const levels = sortedLevels(s.doc);
+          const from = s.levelId;
+          const source = levels.find((l) => l.id === from);
+          const ordinal = (levels.at(-1)?.ordinal ?? -1) + 1;
+          const level: Level = {
+            id: newId("l"),
+            name: `${ordinal + 1} этаж`,
+            ordinal,
+            ...(source?.heightM ? { heightM: source.heightM } : {}),
+          };
+          const on = <T extends { levelId: string; id: string }>(
+            items: T[] | undefined,
+            prefix: string,
+          ) =>
+            (items ?? [])
+              .filter((x) => x.levelId === from)
+              .map((x) => ({ ...x, id: newId(prefix), levelId: level.id }));
+          return {
+            doc: {
+              ...s.doc,
+              levels: [...(s.doc.levels ?? []), level],
+              units: [...(s.doc.units ?? []), ...on(s.doc.units, "u")],
+              openings: [...(s.doc.openings ?? []), ...on(s.doc.openings, "o")],
+              fixtures: [...(s.doc.fixtures ?? []), ...on(s.doc.fixtures, "f")],
+              zones: [...(s.doc.zones ?? []), ...on(s.doc.zones, "z")],
+            },
+            levelId: level.id,
+            selectedId: null,
+          };
+        }),
+      duplicate: (id) =>
+        set((s) => {
+          const doc = s.doc;
+          const anchor = doc.venue.anchor;
+          // Shift east by the object's own width (rooms touch, tables stand in a row).
+          const ringWidth = (ring: number[][]) => {
+            const xs = ring.map((p) => toLocal(anchor, p as LonLat)[0]);
+            return Math.max(...xs) - Math.min(...xs);
+          };
+          const shift = (p: number[], dx: number): Position => {
+            const [x, y] = toLocal(anchor, p as LonLat);
+            return fromLocal(anchor, [x + dx, y]) as Position;
+          };
+          const unit = doc.units?.find((u) => u.id === id);
+          if (unit) {
+            const dx = ringWidth(unit.geometry.coordinates[0] ?? []);
+            const copy = {
+              ...unit,
+              id: newId("u"),
+              geometry: {
+                ...unit.geometry,
+                coordinates: unit.geometry.coordinates.map((r) => r.map((p) => shift(p, dx))),
+              },
+            };
+            return { doc: { ...doc, units: [...(doc.units ?? []), copy] }, selectedId: copy.id };
+          }
+          const fixture = doc.fixtures?.find((f) => f.id === id);
+          if (fixture) {
+            const dx = ringWidth(fixture.geometry.coordinates[0] ?? []) + 0.3;
+            const copy = {
+              ...fixture,
+              id: newId("f"),
+              geometry: {
+                ...fixture.geometry,
+                coordinates: fixture.geometry.coordinates.map((r) => r.map((p) => shift(p, dx))),
+              },
+            };
+            return {
+              doc: { ...doc, fixtures: [...(doc.fixtures ?? []), copy] },
+              selectedId: copy.id,
+            };
+          }
+          const poi = doc.pois?.find((p) => p.id === id);
+          if (poi) {
+            const copy = { ...poi, id: newId("p"), position: shift(poi.position, 1.5) };
+            return { doc: { ...doc, pois: [...(doc.pois ?? []), copy] }, selectedId: copy.id };
+          }
+          return {};
         }),
       updateLevel: (id, patch) =>
         set((s) => ({

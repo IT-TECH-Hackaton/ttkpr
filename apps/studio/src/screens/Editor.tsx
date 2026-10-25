@@ -17,8 +17,11 @@ import {
   TopRight,
   ZoomControls,
 } from "../components/editor/Chrome";
+import { EmptyStart } from "../components/editor/EmptyStart";
+import { PublishChecklist } from "../components/editor/PublishChecklist";
 import { markTourSeen, StudioTour, tourPending } from "../components/editor/Tour";
 import { Inspector } from "../components/Inspector";
+import { PlanImportDialog } from "../components/PlanImportDialog";
 import { unwrap } from "../lib/api";
 import {
   clearBackup,
@@ -30,6 +33,7 @@ import {
 import { localMapLink, mapLink } from "../lib/links";
 import { usePanoramaActions, usePanoramas } from "../lib/panos";
 import { can } from "../lib/permissions";
+import { type PublishIssue, publishIssues } from "../lib/publishCheck";
 import { useMe } from "../lib/session";
 import { useUploadPlan } from "../lib/uploadPlan";
 import { useDraft } from "../store";
@@ -143,6 +147,14 @@ function EditorLayout(props: LayoutProps) {
   const saveError = useDraft((s) => s.saveError);
   const { undo, redo } = useStore(useDraft.temporal);
   const [help, setHelp] = useState(false);
+  const [issues, setIssues] = useState<PublishIssue[] | null>(null);
+  const [importing, setImporting] = useState(false);
+  // «Опубликовать» first checks the plan; a clean plan publishes right away.
+  const requestPublish = () => {
+    const found = publishIssues(useDraft.getState().doc);
+    if (found.length) setIssues(found);
+    else props.onPublish();
+  };
   // The tour starts by itself the first time this device opens the editor.
   const userId = useMe().data?.id;
   const [tour, setTour] = useState(false);
@@ -175,6 +187,11 @@ function EditorLayout(props: LayoutProps) {
       if (e.key === "Escape") {
         if (s.tool !== "select") s.setTool("select");
         else s.select(null);
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d" && s.selectedId && canEdit) {
+        e.preventDefault();
+        s.duplicate(s.selectedId);
         return;
       }
       if ((e.key === "Delete" || e.key === "Backspace") && s.selectedId && canEdit) {
@@ -216,9 +233,16 @@ function EditorLayout(props: LayoutProps) {
         onMovePano={(id, position) => panoActions.update.mutate({ id, patch: { position } })}
       />
 
+      {canEdit && !tour && (
+        <EmptyStart
+          onRecognize={() => setImporting(true)}
+          onUploadPlan={() => fileRef.current?.click()}
+        />
+      )}
+
       <div className="safe-top pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 px-3">
         <TopLeft map={map} onOpenHelp={() => setHelp(true)} />
-        <TopRight map={map} onPublish={props.onPublish} publishing={props.publishing} />
+        <TopRight map={map} onPublish={requestPublish} publishing={props.publishing} />
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 top-20 flex flex-col items-center gap-2 px-3">
@@ -352,6 +376,14 @@ function EditorLayout(props: LayoutProps) {
         />
       )}
       {tour && <StudioTour onClose={closeTour} />}
+      {issues && (
+        <PublishChecklist
+          issues={issues}
+          onClose={() => setIssues(null)}
+          onPublish={props.onPublish}
+        />
+      )}
+      {importing && <PlanImportDialog mapId={map.id} onClose={() => setImporting(false)} />}
     </div>
   );
 }

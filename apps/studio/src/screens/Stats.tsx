@@ -4,6 +4,7 @@ import { getMap, mapStats, type StatCount } from "@ttkpr/api-client";
 import { cn } from "@ttkpr/ui";
 import { useState } from "react";
 import { AppShell } from "../components/AppShell";
+import { StatsHeatmap } from "../components/StatsHeatmap";
 import { unwrap } from "../lib/api";
 
 const PERIODS = [7, 30, 90] as const;
@@ -100,6 +101,8 @@ export function StatsScreen({ mapId }: { mapId: string }) {
                 <span>сегодня</span>
               </div>
             </section>
+
+            <StatsHeatmap mapId={mapId} counts={data.topPois} />
 
             <div className="grid gap-4 lg:grid-cols-2">
               <TopList

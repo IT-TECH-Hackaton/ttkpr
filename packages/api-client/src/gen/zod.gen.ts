@@ -271,12 +271,20 @@ export const zMapCreate = z.object({
 });
 
 /**
+ * MapUnlock
+ */
+export const zMapUnlock = z.object({
+    password: z.string().min(1).max(100)
+});
+
+/**
  * MapUpdate
  */
 export const zMapUpdate = z.object({
     title: z.string().min(1).max(200).nullish(),
     slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/).nullish(),
-    accessMode: zAccessMode.nullish()
+    accessMode: zAccessMode.nullish(),
+    accessPassword: z.string().min(4).max(100).nullish()
 });
 
 /**
@@ -319,7 +327,8 @@ export const zMapSummary = z.object({
     publishedNumber: z.int().nullish(),
     updatedAt: z.iso.datetime(),
     role: zMemberRole.optional().default('viewer'),
-    permissions: z.array(z.string()).optional()
+    permissions: z.array(z.string()).optional(),
+    hasPassword: z.boolean().optional().default(false)
 });
 
 /**
@@ -853,6 +862,15 @@ export const zVenue = z.object({
 });
 
 /**
+ * VersionOut
+ */
+export const zVersionOut = z.object({
+    number: z.int(),
+    createdAt: z.iso.datetime(),
+    published: z.boolean()
+});
+
+/**
  * VersionStatus
  */
 export const zVersionStatus = z.enum([
@@ -1043,6 +1061,36 @@ export const zPublishPath = z.object({
  * Successful Response
  */
 export const zPublishResponse = zPublishOut;
+
+export const zListVersionsPath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Response List Versions
+ *
+ * Successful Response
+ */
+export const zListVersionsResponse = z.array(zVersionOut);
+
+export const zRepublishVersionPath = z.object({
+    map_id: z.uuid(),
+    number: z.int()
+});
+
+/**
+ * Successful Response
+ */
+export const zRepublishVersionResponse = zPublishOut;
+
+export const zUnpublishPath = z.object({
+    map_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zUnpublishResponse = z.void();
 
 export const zUploadAssetBody = zBodyUploadAsset;
 
@@ -1338,6 +1386,17 @@ export const zGetLivePath = z.object({
  */
 export const zGetLiveResponse = zLiveOut;
 
+export const zUnlockMapBody = zMapUnlock;
+
+export const zUnlockMapPath = z.object({
+    slug: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zUnlockMapResponse = z.void();
+
 export const zGetManifestPath = z.object({
     slug: z.string()
 });
@@ -1358,6 +1417,10 @@ export const zGetBundlePath = z.object({
  * Successful Response
  */
 export const zGetBundleResponse = z.record(z.string(), z.unknown());
+
+export const zGetDraftBundlePath = z.object({
+    slug: z.string()
+});
 
 export const zRecordEventsPath = z.object({
     slug: z.string()

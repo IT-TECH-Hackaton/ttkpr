@@ -31,6 +31,7 @@ import { scalePoint } from "../lib/scalePlan";
 import { useDraft } from "../store";
 import { CaptureQrDialog } from "./CaptureQrDialog";
 import { ChatInbox } from "./ChatInbox";
+import { LiveStatusField } from "./LiveStatusField";
 import { PlanImportDialog } from "./PlanImportDialog";
 import { RoomIconField } from "./RoomIconField";
 import { RouteCheck } from "./RouteCheck";
@@ -118,7 +119,7 @@ export function Inspector({
   else if (pano) content = <PanoPanel key={pano.id} mapId={mapId} pano={pano} canEdit={canEdit} />;
   else if (unit) content = <UnitPanel id={unit.id} mapId={mapId} panos={panos} />;
   else if (fixture) content = <FixturePanel id={fixture.id} />;
-  else if (poi) content = <PoiPanel id={poi.id} />;
+  else if (poi) content = <PoiPanel id={poi.id} mapId={mapId} />;
   else if (underlay) content = <UnderlayPanel id={underlay.id} />;
   else if (connector) content = <ConnectorPanel id={connector.id} />;
   else if (tour) content = <TourPanel id={tour.id} slug={slug} />;
@@ -189,15 +190,27 @@ function ConnectorPanel({ id }: { id: string }) {
   );
 }
 
-function DeleteButton({ id }: { id: string }) {
+function DeleteButton({ id, duplicable = false }: { id: string; duplicable?: boolean }) {
   return (
-    <Button
-      variant="secondary"
-      className="w-full text-danger"
-      onClick={() => useDraft.getState().remove(id)}
-    >
-      Удалить
-    </Button>
+    <div className="flex gap-2">
+      {duplicable && (
+        <Button
+          variant="secondary"
+          className="flex-1"
+          title="Ctrl+D"
+          onClick={() => useDraft.getState().duplicate(id)}
+        >
+          Дублировать
+        </Button>
+      )}
+      <Button
+        variant="secondary"
+        className="flex-1 text-danger"
+        onClick={() => useDraft.getState().remove(id)}
+      >
+        Удалить
+      </Button>
+    </div>
   );
 }
 
@@ -241,7 +254,7 @@ function UnitPanel({ id, mapId, panos }: { id: string; mapId: string; panos: Pan
         Можно пройти (участвует в маршрутах)
       </label>
       <RoomSize unitId={unit.id} mapId={mapId} panos={panos} />
-      <DeleteButton id={unit.id} />
+      <DeleteButton id={unit.id} duplicable />
     </Section>
   );
 }
@@ -327,12 +340,12 @@ function FixturePanel({ id }: { id: string }) {
       <p className="text-xs text-muted">
         {fixture.obstacle === false ? "Не мешает проходу" : "Маршруты обходят"}
       </p>
-      <DeleteButton id={fixture.id} />
+      <DeleteButton id={fixture.id} duplicable />
     </Section>
   );
 }
 
-function PoiPanel({ id }: { id: string }) {
+function PoiPanel({ id, mapId }: { id: string; mapId: string }) {
   const poi = useDraft((s) => s.doc.pois?.find((p) => p.id === id));
   const { updatePoi } = useDraft.getState();
   if (!poi) return null;
@@ -368,7 +381,8 @@ function PoiPanel({ id }: { id: string }) {
           onChange={(e) => updatePoi(poi.id, { description: e.target.value })}
         />
       </Field>
-      <DeleteButton id={poi.id} />
+      <LiveStatusField mapId={mapId} poiId={poi.id} />
+      <DeleteButton id={poi.id} duplicable />
     </Section>
   );
 }

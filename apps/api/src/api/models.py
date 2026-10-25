@@ -80,6 +80,8 @@ class Map(Base):
     slug: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     title: Mapped[str] = mapped_column(String(200))
     access_mode: Mapped[AccessMode] = mapped_column(String(16), default=AccessMode.LINK)
+    # "password" maps: visitors type it once, then a signed cookie lets them in.
+    access_password_hash: Mapped[str | None] = mapped_column(String(255), default=None)
     draft: Mapped[dict[str, Any]] = mapped_column(JSONB)
     draft_version: Mapped[int] = mapped_column(Integer, default=1)
     published_version_id: Mapped[uuid.UUID | None] = mapped_column(

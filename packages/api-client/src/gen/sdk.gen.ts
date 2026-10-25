@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AcceptInviteData, AcceptInviteErrors, AcceptInviteResponses, AddMemberData, AddMemberErrors, AddMemberResponses, ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ClearLiveStatusData, ClearLiveStatusErrors, ClearLiveStatusResponses, CreateCaptureData, CreateCaptureErrors, CreateCaptureResponses, CreateCaptureTokenData, CreateCaptureTokenErrors, CreateCaptureTokenResponses, CreateInviteData, CreateInviteErrors, CreateInviteResponses, CreateMapData, CreateMapErrors, CreateMapResponses, CreatePlanImportData, CreatePlanImportErrors, CreatePlanImportResponses, CreateScanData, CreateScanErrors, CreateScanResponses, DeleteMapData, DeleteMapErrors, DeleteMapResponses, DeletePanoramaData, DeletePanoramaErrors, DeletePanoramaResponses, DeleteScanData, DeleteScanErrors, DeleteScanResponses, GetBundleData, GetBundleErrors, GetBundleResponses, GetChatData, GetChatErrors, GetChatResponses, GetDraftData, GetDraftErrors, GetDraftResponses, GetLiveData, GetLiveErrors, GetLiveResponses, GetManifestData, GetManifestErrors, GetManifestResponses, GetMapData, GetMapErrors, GetMapResponses, GetPanoramaData, GetPanoramaErrors, GetPanoramaResponses, GetPlanImportData, GetPlanImportErrors, GetPlanImportResponses, GetScanData, GetScanErrors, GetScanResponses, HealthData, HealthResponses, ListChatData, ListChatErrors, ListChatResponses, ListLiveData, ListLiveErrors, ListLiveResponses, ListMapsData, ListMapsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListPanoramasData, ListPanoramasErrors, ListPanoramasResponses, ListScansData, ListScansErrors, ListScansResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutEverywhereData, LogoutEverywhereResponses, LogoutResponses, MapStatsData, MapStatsErrors, MapStatsResponses, MeData, MeResponses, PostChatData, PostChatErrors, PostChatResponses, PublishData, PublishErrors, PublishResponses, RecordEventsData, RecordEventsErrors, RecordEventsResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, ReplyChatData, ReplyChatErrors, ReplyChatResponses, SaveDraftData, SaveDraftErrors, SaveDraftResponses, SetLiveStatusData, SetLiveStatusErrors, SetLiveStatusResponses, StartStitchingData, StartStitchingErrors, StartStitchingResponses, UpdateMapData, UpdateMapErrors, UpdateMapResponses, UpdateMemberData, UpdateMemberErrors, UpdateMemberResponses, UpdatePanoramaData, UpdatePanoramaErrors, UpdatePanoramaResponses, UpdateProfileData, UpdateProfileErrors, UpdateProfileResponses, UploadAssetData, UploadAssetErrors, UploadAssetResponses, UploadFrameData, UploadFrameErrors, UploadFrameResponses, UploadPanoramaData, UploadPanoramaErrors, UploadPanoramaResponses, UploadPanoramaVideoData, UploadPanoramaVideoErrors, UploadPanoramaVideoResponses } from './types.gen';
+import type { AcceptInviteData, AcceptInviteErrors, AcceptInviteResponses, AddMemberData, AddMemberErrors, AddMemberResponses, ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ClearLiveStatusData, ClearLiveStatusErrors, ClearLiveStatusResponses, CreateCaptureData, CreateCaptureErrors, CreateCaptureResponses, CreateCaptureTokenData, CreateCaptureTokenErrors, CreateCaptureTokenResponses, CreateInviteData, CreateInviteErrors, CreateInviteResponses, CreateMapData, CreateMapErrors, CreateMapResponses, CreatePlanImportData, CreatePlanImportErrors, CreatePlanImportResponses, CreateScanData, CreateScanErrors, CreateScanResponses, DeleteMapData, DeleteMapErrors, DeleteMapResponses, DeletePanoramaData, DeletePanoramaErrors, DeletePanoramaResponses, DeleteScanData, DeleteScanErrors, DeleteScanResponses, GetBundleData, GetBundleErrors, GetBundleResponses, GetChatData, GetChatErrors, GetChatResponses, GetDraftBundleData, GetDraftBundleErrors, GetDraftBundleResponses, GetDraftData, GetDraftErrors, GetDraftResponses, GetLiveData, GetLiveErrors, GetLiveResponses, GetManifestData, GetManifestErrors, GetManifestResponses, GetMapData, GetMapErrors, GetMapResponses, GetPanoramaData, GetPanoramaErrors, GetPanoramaResponses, GetPlanImportData, GetPlanImportErrors, GetPlanImportResponses, GetScanData, GetScanErrors, GetScanResponses, HealthData, HealthResponses, ListChatData, ListChatErrors, ListChatResponses, ListLiveData, ListLiveErrors, ListLiveResponses, ListMapsData, ListMapsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListPanoramasData, ListPanoramasErrors, ListPanoramasResponses, ListScansData, ListScansErrors, ListScansResponses, ListVersionsData, ListVersionsErrors, ListVersionsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutEverywhereData, LogoutEverywhereResponses, LogoutResponses, MapStatsData, MapStatsErrors, MapStatsResponses, MeData, MeResponses, PostChatData, PostChatErrors, PostChatResponses, PublishData, PublishErrors, PublishResponses, RecordEventsData, RecordEventsErrors, RecordEventsResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, ReplyChatData, ReplyChatErrors, ReplyChatResponses, RepublishVersionData, RepublishVersionErrors, RepublishVersionResponses, SaveDraftData, SaveDraftErrors, SaveDraftResponses, SetLiveStatusData, SetLiveStatusErrors, SetLiveStatusResponses, StartStitchingData, StartStitchingErrors, StartStitchingResponses, UnlockMapData, UnlockMapErrors, UnlockMapResponses, UnpublishData, UnpublishErrors, UnpublishResponses, UpdateMapData, UpdateMapErrors, UpdateMapResponses, UpdateMemberData, UpdateMemberErrors, UpdateMemberResponses, UpdatePanoramaData, UpdatePanoramaErrors, UpdatePanoramaResponses, UpdateProfileData, UpdateProfileErrors, UpdateProfileResponses, UploadAssetData, UploadAssetErrors, UploadAssetResponses, UploadFrameData, UploadFrameErrors, UploadFrameResponses, UploadPanoramaData, UploadPanoramaErrors, UploadPanoramaResponses, UploadPanoramaVideoData, UploadPanoramaVideoErrors, UploadPanoramaVideoResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -150,6 +150,27 @@ export const saveDraft = <ThrowOnError extends boolean = false>(options: Options
  * Freezes draft + ready panoramas into a new immutable version; the link stays the same.
  */
 export const publish = <ThrowOnError extends boolean = false>(options: Options<PublishData, ThrowOnError>): RequestResult<PublishResponses, PublishErrors, ThrowOnError> => (options.client ?? client).post<PublishResponses, PublishErrors, ThrowOnError>({ url: '/api/maps/{map_id}/publish', ...options });
+
+/**
+ * List Versions
+ *
+ * Published versions, newest first; one of them may be the one visitors see.
+ */
+export const listVersions = <ThrowOnError extends boolean = false>(options: Options<ListVersionsData, ThrowOnError>): RequestResult<ListVersionsResponses, ListVersionsErrors, ThrowOnError> => (options.client ?? client).get<ListVersionsResponses, ListVersionsErrors, ThrowOnError>({ url: '/api/maps/{map_id}/versions', ...options });
+
+/**
+ * Republish Version
+ *
+ * Back to an earlier version: visitors see it again, the link stays; the draft is untouched.
+ */
+export const republishVersion = <ThrowOnError extends boolean = false>(options: Options<RepublishVersionData, ThrowOnError>): RequestResult<RepublishVersionResponses, RepublishVersionErrors, ThrowOnError> => (options.client ?? client).post<RepublishVersionResponses, RepublishVersionErrors, ThrowOnError>({ url: '/api/maps/{map_id}/versions/{number}/publish', ...options });
+
+/**
+ * Unpublish
+ *
+ * Visitors get "not published" again; versions are kept and can be published back.
+ */
+export const unpublish = <ThrowOnError extends boolean = false>(options: Options<UnpublishData, ThrowOnError>): RequestResult<UnpublishResponses, UnpublishErrors, ThrowOnError> => (options.client ?? client).post<UnpublishResponses, UnpublishErrors, ThrowOnError>({ url: '/api/maps/{map_id}/unpublish', ...options });
 
 /**
  * Upload Asset
@@ -418,6 +439,20 @@ export const listLive = <ThrowOnError extends boolean = false>(options: Options<
 export const getLive = <ThrowOnError extends boolean = false>(options: Options<GetLiveData, ThrowOnError>): RequestResult<GetLiveResponses, GetLiveErrors, ThrowOnError> => (options.client ?? client).get<GetLiveResponses, GetLiveErrors, ThrowOnError>({ url: '/api/public/maps/{slug}/live.json', ...options });
 
 /**
+ * Unlock Map
+ *
+ * A password map: the right password sets a cookie that opens this map for 30 days.
+ */
+export const unlockMap = <ThrowOnError extends boolean = false>(options: Options<UnlockMapData, ThrowOnError>): RequestResult<UnlockMapResponses, UnlockMapErrors, ThrowOnError> => (options.client ?? client).post<UnlockMapResponses, UnlockMapErrors, ThrowOnError>({
+    url: '/api/public/maps/{slug}/unlock',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * Get Manifest
  *
  * Points at the current version. Public maps: the static bundle under /media, served by
@@ -431,6 +466,14 @@ export const getManifest = <ThrowOnError extends boolean = false>(options: Optio
  * Kept for members-only maps and for manifests saved (offline) before static bundles.
  */
 export const getBundle = <ThrowOnError extends boolean = false>(options: Options<GetBundleData, ThrowOnError>): RequestResult<GetBundleResponses, GetBundleErrors, ThrowOnError> => (options.client ?? client).get<GetBundleResponses, GetBundleErrors, ThrowOnError>({ url: '/api/public/maps/{slug}/v/{number}/bundle.json', ...options });
+
+/**
+ * Get Draft Bundle
+ *
+ * Studio preview: the current draft with ready panoramas, as visitors would see it after
+ * publishing. Team members only; strangers get 404, so drafts of other maps do not leak.
+ */
+export const getDraftBundle = <ThrowOnError extends boolean = false>(options: Options<GetDraftBundleData, ThrowOnError>): RequestResult<GetDraftBundleResponses, GetDraftBundleErrors, ThrowOnError> => (options.client ?? client).get<GetDraftBundleResponses, GetDraftBundleErrors, ThrowOnError>({ url: '/api/public/maps/{slug}/draft.json', ...options });
 
 /**
  * Record Events

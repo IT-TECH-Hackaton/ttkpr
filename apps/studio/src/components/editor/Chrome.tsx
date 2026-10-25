@@ -10,6 +10,7 @@ import {
   ChevronDown,
   CircleQuestionMark,
   CloudOff,
+  Copy,
   DoorOpen,
   Eye,
   Footprints,
@@ -235,7 +236,7 @@ export function TopLeft({ map, onOpenHelp }: { map: MapSummary; onOpenHelp: () =
                 disabled={!map.publishedNumber}
                 onClick={() => {
                   close();
-                  window.open(localMapLink(map.slug), "_blank");
+                  window.open(`${localMapLink(map.slug)}?preview=1`, "_blank");
                 }}
               >
                 Открыть как посетитель
@@ -318,6 +319,15 @@ export function TopLeft({ map, onOpenHelp }: { map: MapSummary; onOpenHelp: () =
                 >
                   Добавить этаж выше
                 </MenuItem>
+                <MenuItem
+                  icon={<Copy />}
+                  onClick={() => {
+                    useDraft.getState().copyLevel();
+                    close();
+                  }}
+                >
+                  Копия этажа выше
+                </MenuItem>
               </>
             )}
           </>
@@ -379,10 +389,9 @@ export function TopRight({
         </button>
         <button
           type="button"
-          title={map.publishedNumber ? "Открыть опубликованную карту" : "Карта ещё не опубликована"}
+          title="Предпросмотр: черновик глазами гостя"
           aria-label="Открыть как посетитель"
-          disabled={!map.publishedNumber}
-          onClick={() => window.open(localMapLink(map.slug), "_blank")}
+          onClick={() => window.open(`${localMapLink(map.slug)}?preview=1`, "_blank")}
           className={iconButton}
         >
           <Eye />

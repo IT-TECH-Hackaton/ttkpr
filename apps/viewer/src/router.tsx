@@ -22,9 +22,14 @@ export interface MapSearch {
   walk?: number;
   /** An organizer's prepared route (tour id). */
   tour?: string;
+  /** Studio preview: the current draft instead of the published version (team only). */
+  preview?: true;
 }
 
 const str = (value: unknown) => (typeof value === "string" && value ? value : undefined);
+// The router JSON-parses query values: "?acc=1" arrives as the number 1.
+const flag = (value: unknown) =>
+  value === true || value === 1 || value === "true" || value === "1" ? true : undefined;
 
 const rootRoute = createRootRoute({ component: Outlet });
 
@@ -46,9 +51,10 @@ export const mapRoute = createRoute({
       pano: str(search.pano),
       from: str(search.from),
       to: str(search.to),
-      acc: search.acc === true || search.acc === "true" || search.acc === "1" ? true : undefined,
+      acc: flag(search.acc),
       here: str(search.here),
       tour: str(search.tour),
+      preview: flag(search.preview),
       walk: search.walk !== undefined && Number.isInteger(walk) && walk >= 0 ? walk : undefined,
     };
   },

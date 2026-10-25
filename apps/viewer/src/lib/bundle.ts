@@ -29,6 +29,19 @@ async function load(slug: string): Promise<LoadedMap> {
   }
 }
 
-export function useMapBundle(slug: string) {
-  return useQuery({ queryKey: ["bundle", slug], queryFn: () => load(slug), networkMode: "always" });
+/** The studio's draft, read with the organizer's session; never saved for offline use. */
+async function loadDraft(slug: string): Promise<LoadedMap> {
+  const bundleUrl = `/api/public/maps/${encodeURIComponent(slug)}/draft.json`;
+  const response = await fetch(bundleUrl, { credentials: "same-origin", cache: "no-store" });
+  if (!response.ok) throw new Error(`${bundleUrl}: ${response.status}`);
+  const bundle = (await response.json()) as MapBundle;
+  return { manifest: { slug, title: bundle.venue.name, bundleUrl }, bundle, fromSaved: false };
+}
+
+export function useMapBundle(slug: string, preview = false) {
+  return useQuery({
+    queryKey: ["bundle", slug, preview],
+    queryFn: () => (preview ? loadDraft(slug) : load(slug)),
+    networkMode: "always",
+  });
 }

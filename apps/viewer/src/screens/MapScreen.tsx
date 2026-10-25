@@ -20,6 +20,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react
 import { ChatPanel } from "../components/ChatPanel";
 import { Legend } from "../components/Legend";
 import { LevelSwitcher } from "../components/LevelSwitcher";
+import { MapPassword } from "../components/MapPassword";
 import { OfflineControl } from "../components/OfflineControl";
 import { PlaceSheet, SHEET_PEEK } from "../components/PlaceSheet";
 import { PlanMap } from "../components/PlanMap";
@@ -27,6 +28,7 @@ import { RouteCard, TourCard } from "../components/RouteCard";
 import { SearchBar } from "../components/SearchBar";
 import { WalkControls } from "../components/WalkControls";
 import { useMapBundle } from "../lib/bundle";
+import { useLive } from "../lib/live";
 import { zoomIn, zoomOut } from "../lib/mapCamera";
 import { type End, endpointLabel, formatEndpoint, useNavGraph, useRoute } from "../lib/routing";
 import { usePoiSearch } from "../lib/search";
@@ -54,7 +56,10 @@ export function MapScreen() {
   const { slug } = mapRoute.useParams();
   const search = mapRoute.useSearch();
   const navigate = useNavigate({ from: mapRoute.fullPath });
-  const { data, error, isPending } = useMapBundle(slug);
+  const preview = search.preview === true;
+  const { data, error, isPending, refetch } = useMapBundle(slug, preview);
+  // The built-in demo is static files; a draft preview has no live statuses either.
+  const live = useLive(slug, slug !== "demo" && !preview && data !== undefined);
   const online = useOnline();
   const wide = useMediaQuery(WIDE_QUERY);
   const bundle = data?.bundle;
@@ -155,6 +160,9 @@ export function MapScreen() {
   if (isPending) {
     return <div className="grid h-full place-items-center text-muted">Загружаем карту…</div>;
   }
+  if (error?.message.endsWith("401")) {
+    return <MapPassword slug={slug} onUnlocked={() => void refetch()} />;
+  }
   if (error || !data || !graph) {
     return (
       <div className="grid h-full place-items-center px-6 text-center">
@@ -162,7 +170,9 @@ export function MapScreen() {
           {error?.message.endsWith("403")
             ? "Эта карта доступна только по приглашению организатора."
             : error?.message.endsWith("404")
-              ? "Карта не найдена или ещё не опубликована."
+              ? preview
+                ? "Предпросмотр доступен только команде карты — войдите в студию."
+                : "Карта не найдена или ещё не опубликована."
               : "Не удалось открыть карту. Проверьте ссылку или подключение."}
         </p>
       </div>
@@ -300,13 +310,22 @@ export function MapScreen() {
     ? { top: 16, bottom: 16, left: WIDE_COLUMN + 32 }
     : { top: routeMode ? 160 : 84, bottom: SHEET_PEEK + 24, left: 16 };
 
-  const offlineBanner = (!online || fromSaved) && (
+  const offlineBanner = preview ? (
     <p
       role="status"
-      className="pointer-events-auto rounded-xl bg-amber-100 dark:bg-amber-950/60 px-3 py-2 text-sm text-amber-900 dark:text-amber-200 shadow"
+      className="pointer-events-auto rounded-xl bg-sky-100 dark:bg-sky-950/60 px-3 py-2 text-sm text-sky-900 dark:text-sky-200 shadow"
     >
-      Нет сети — показываем сохранённую версию карты
+      Предпросмотр черновика — так карту увидят гости после публикации
     </p>
+  ) : (
+    (!online || fromSaved) && (
+      <p
+        role="status"
+        className="pointer-events-auto rounded-xl bg-amber-100 dark:bg-amber-950/60 px-3 py-2 text-sm text-amber-900 dark:text-amber-200 shadow"
+      >
+        Нет сети — показываем сохранённую версию карты
+      </p>
+    )
   );
   const topControl = picking ? (
     <div
@@ -428,6 +447,7 @@ export function MapScreen() {
       bundle={map}
       level={level}
       poi={selectedPoi}
+      live={live.data}
       hasPano={poiPano !== null}
       here={herePoi}
       routePanel={
@@ -462,13 +482,13 @@ export function MapScreen() {
       venueExtra={
         <div className="space-y-2">
           {/* The built-in demo is static files: no organizers to write to. */}
-          {slug !== "demo" && (
+          {slug !== "demo" && !preview && (
             <Button variant="secondary" className="w-full" onClick={() => setChat(true)}>
               <MessageCircle className="size-4" aria-hidden />
               Вопрос организаторам
             </Button>
           )}
-          <OfflineControl slug={slug} version={manifest.version} />
+          {!preview && <OfflineControl slug={slug} version={manifest.version} />}
           <ThemeSwitch />
         </div>
       }

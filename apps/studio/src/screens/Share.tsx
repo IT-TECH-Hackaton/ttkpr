@@ -1,6 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { getDraft, getMap, type MapSummary, publish, updateMap } from "@ttkpr/api-client";
+import {
+  getDraft,
+  getMap,
+  listVersions,
+  type MapSummary,
+  publish,
+  republishVersion,
+  unpublish,
+  updateMap,
+} from "@ttkpr/api-client";
 import { SLUG_RE, slugify } from "@ttkpr/map-core";
 import { Button, cn } from "@ttkpr/ui";
 import { useEffect, useState } from "react";
@@ -12,6 +21,7 @@ import { hereLink, isLanOnly, localMapLink, mapLink } from "../lib/links";
 const ACCESS: { id: MapSummary["accessMode"]; title: string; hint: string }[] = [
   { id: "link", title: "По ссылке", hint: "Видят все, у кого есть ссылка или QR-код" },
   { id: "public", title: "Публичная", hint: "Можно показывать в каталогах и на сайте" },
+  { id: "password", title: "По паролю", hint: "Гость вводит пароль один раз на устройстве" },
   { id: "private", title: "Только участники", hint: "Только вошедшие организаторы этой карты" },
 ];
 
@@ -40,14 +50,35 @@ export function ShareScreen({ mapId }: { mapId: string }) {
   }, [map.data]);
 
   const save = useMutation({
-    mutationFn: (body: { slug?: string; accessMode?: MapSummary["accessMode"] }) =>
-      unwrap(updateMap({ path: { map_id: mapId }, body })),
+    mutationFn: (body: {
+      slug?: string;
+      accessMode?: MapSummary["accessMode"];
+      accessPassword?: string;
+    }) => unwrap(updateMap({ path: { map_id: mapId }, body })),
     onSuccess: (updated) => queryClient.setQueryData(["map", mapId], updated),
   });
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ["map", mapId] });
+    void queryClient.invalidateQueries({ queryKey: ["versions", mapId] });
+  };
   const publishNow = useMutation({
     mutationFn: () => unwrap(publish({ path: { map_id: mapId } })),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["map", mapId] }),
+    onSuccess: refresh,
   });
+  const versions = useQuery({
+    queryKey: ["versions", mapId],
+    queryFn: () => unwrap(listVersions({ path: { map_id: mapId } })),
+  });
+  const restore = useMutation({
+    mutationFn: (number: number) => unwrap(republishVersion({ path: { map_id: mapId, number } })),
+    onSuccess: refresh,
+  });
+  const takeDown = useMutation({
+    mutationFn: () => unwrap(unpublish({ path: { map_id: mapId } })),
+    onSuccess: refresh,
+  });
+  const [password, setPassword] = useState("");
+  const [askPassword, setAskPassword] = useState(false);
 
   if (!map.data) return <div className="grid h-full place-items-center text-muted">Загружаем…</div>;
   const current = map.data;
@@ -196,13 +227,17 @@ export function ShareScreen({ mapId }: { mapId: string }) {
 
         <section className="space-y-3 print:hidden">
           <h2 className="text-lg font-semibold">Кто видит карту</h2>
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {ACCESS.map((a) => (
               <button
                 key={a.id}
                 type="button"
                 aria-pressed={current.accessMode === a.id}
-                onClick={() => save.mutate({ accessMode: a.id })}
+                onClick={() =>
+                  a.id === "password" && !current.hasPassword
+                    ? setAskPassword(true)
+                    : save.mutate({ accessMode: a.id })
+                }
                 className={cn(
                   "rounded-2xl border p-4 text-left",
                   current.accessMode === a.id ? "border-accent bg-accent/5" : "border-border",
@@ -213,6 +248,92 @@ export function ShareScreen({ mapId }: { mapId: string }) {
               </button>
             ))}
           </div>
+        </section>
+
+        {(askPassword || current.accessMode === "password") && (
+          <form
+            className="flex flex-wrap items-end gap-2 print:hidden"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (password.length < 4) return;
+              save.mutate(
+                { accessMode: "password", accessPassword: password },
+                {
+                  onSuccess: () => {
+                    setPassword("");
+                    setAskPassword(false);
+                  },
+                },
+              );
+            }}
+          >
+            <label className="flex min-w-48 flex-1 flex-col gap-1 text-sm">
+              {current.hasPassword ? "Новый пароль для гостей" : "Пароль для гостей"}
+              <input
+                type="text"
+                autoComplete="off"
+                minLength={4}
+                maxLength={100}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="rounded-xl border border-border bg-bg px-3 py-2"
+              />
+            </label>
+            <Button type="submit" disabled={password.length < 4 || save.isPending}>
+              {current.hasPassword ? "Сменить пароль" : "Закрыть паролем"}
+            </Button>
+          </form>
+        )}
+        {save.error && <p className="text-sm text-danger print:hidden">{save.error.message}</p>}
+
+        <section className="space-y-3 print:hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold">Версии</h2>
+            {current.publishedNumber && (
+              <Button
+                variant="secondary"
+                className="text-danger"
+                disabled={takeDown.isPending}
+                onClick={() => {
+                  if (window.confirm("Снять карту с публикации? Гости перестанут её видеть."))
+                    takeDown.mutate();
+                }}
+              >
+                Снять с публикации
+              </Button>
+            )}
+          </div>
+          {versions.data?.length ? (
+            <ul className="divide-y divide-border rounded-2xl border border-border">
+              {versions.data.map((v) => (
+                <li key={v.number} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className="font-medium">Версия {v.number}</span>
+                  <span className="flex-1 text-sm text-muted">
+                    {new Date(v.createdAt).toLocaleString("ru-RU", {
+                      day: "numeric",
+                      month: "long",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  {v.published ? (
+                    <span className="text-sm font-medium text-emerald-600">Видят гости</span>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      className="min-h-9 px-3"
+                      disabled={restore.isPending}
+                      onClick={() => restore.mutate(v.number)}
+                    >
+                      Вернуть
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted">Карта ещё не публиковалась</p>
+          )}
         </section>
 
         <section className="space-y-3 print:hidden">

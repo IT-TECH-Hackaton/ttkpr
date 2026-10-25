@@ -11,6 +11,8 @@ import { Button } from "@ttkpr/ui";
 import { LocateFixed, Navigation, Route as RouteIcon, View, X } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Sheet, type SheetRef } from "react-modal-sheet";
+import type { LivePlace } from "../lib/live";
+import { LiveBadge } from "./LiveBadge";
 
 interface Props {
   bundle: MapBundle;
@@ -33,6 +35,8 @@ interface Props {
   onOpenTour?: (id: string) => void;
   /** Changing it lowers the sheet to the peek height, to show the plan (a tapped route step). */
   peekKey?: number;
+  /** Organizer-set statuses by POI id (open, queue, closed). */
+  live?: Record<string, LivePlace>;
   /** A room tapped on the plan: its card (size, places, panorama, route). */
   room?: Unit;
   roomPanos?: number;
@@ -118,6 +122,7 @@ function PlaceContent({
   onRouteToRoom,
   onRouteFromRoom,
   onCloseRoom,
+  live = {},
 }: Omit<Props, "wide" | "peekKey" | "openKey">) {
   const levelPois = (bundle.pois ?? []).filter((p) => p.levelId === level?.id);
   const tours = (bundle.tours ?? []).filter((t) => (t.stops?.length ?? 0) >= 2);
@@ -134,6 +139,7 @@ function PlaceContent({
             <p className="text-sm text-muted">
               {categoryLabel(poi.category)} · {level?.name}
             </p>
+            <LiveBadge place={live[poi.id]} className="mt-1.5" />
           </div>
           <Button variant="ghost" aria-label="Закрыть" onClick={onClose} className="-mr-2 px-3">
             <X className="size-5" aria-hidden />
@@ -231,7 +237,11 @@ function PlaceContent({
                     <span className="inline-block size-2.5 rounded-full bg-accent" />
                   </span>
                   <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
-                  <span className="shrink-0 text-sm text-muted">{categoryLabel(p.category)}</span>
+                  {live[p.id] ? (
+                    <LiveBadge place={live[p.id]} className="shrink-0" />
+                  ) : (
+                    <span className="shrink-0 text-sm text-muted">{categoryLabel(p.category)}</span>
+                  )}
                 </button>
               </li>
             ))}
@@ -293,7 +303,11 @@ function PlaceContent({
                 <span className="inline-block size-2.5 rounded-full bg-accent" />
               </span>
               <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
-              <span className="shrink-0 text-sm text-muted">{categoryLabel(p.category)}</span>
+              {live[p.id] ? (
+                <LiveBadge place={live[p.id]} className="shrink-0" />
+              ) : (
+                <span className="shrink-0 text-sm text-muted">{categoryLabel(p.category)}</span>
+              )}
             </button>
           </li>
         ))}

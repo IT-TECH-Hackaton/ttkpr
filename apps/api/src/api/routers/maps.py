@@ -30,7 +30,9 @@ from api.schemas import (
     MapSummary,
     MapUpdate,
     PublishOut,
+    VersionOut,
 )
+from api.security import hash_password
 from api.slugs import RESERVED, free_slug
 from api.storage import get_storage
 from api.uploads import ensure_image, read_limited, reencode_webp
@@ -52,6 +54,7 @@ async def _summary(db: DbSession, found: Map, role: MemberRole) -> MapSummary:
             select(MapVersion.number).where(MapVersion.id == found.published_version_id)
         )
     summary = MapSummary.model_validate(found)
+    summary.has_password = found.access_password_hash is not None
     summary.published_number = number
     return _with_role(summary, role)
 
@@ -68,6 +71,7 @@ async def list_maps(db: DbSession, user: CurrentUser) -> list[MapSummary]:
     result = []
     for found, number, role in rows:
         summary = MapSummary.model_validate(found)
+        summary.has_password = found.access_password_hash is not None
         summary.published_number = number
         result.append(_with_role(summary, MemberRole(role)))
     return result
@@ -98,19 +102,23 @@ async def update_map(
     map_id: uuid.UUID, body: MapUpdate, db: DbSession, user: CurrentUser
 ) -> MapSummary:
     # Title is part of editing; the public link and who sees the map are sharing decisions.
-    sharing = (body.slug is not None and body.slug != "") or body.access_mode is not None
+    sharing = (
+        (body.slug is not None and body.slug != "")
+        or body.access_mode is not None
+        or body.access_password is not None
+    )
     found = await member_map(db, map_id, user, Permission.SHARE if sharing else Permission.EDIT)
     _, role = await member_access(db, map_id, user)
-    if body.access_mode == AccessMode.PASSWORD:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Доступ по паролю пока не поддерживается — выберите «По ссылке», «Публичная»"
-            " или «Только участники»",
-        )
     mode_changes = body.access_mode is not None and body.access_mode != found.access_mode
     if mode_changes:
         # Same lock as publishing and the manifest's lazy write of static bundles.
         await db.refresh(found, with_for_update=True)
+    if body.access_password:
+        # After the lock's re-read; a new password locks out everyone who unlocked with the
+        # old one (see access.map_key).
+        found.access_password_hash = hash_password(body.access_password)
+    if body.access_mode == AccessMode.PASSWORD and not found.access_password_hash:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Задайте пароль для карты")
     if body.slug and body.slug != found.slug:
         if body.slug in RESERVED or await db.scalar(select(Map.id).where(Map.slug == body.slug)):
             raise HTTPException(status.HTTP_409_CONFLICT, "Такой адрес уже занят")
@@ -177,7 +185,7 @@ async def save_draft(
     return DraftOut(document=document, version=new_version)
 
 
-def _bundle_pano(pano: Panorama) -> Pano:
+def bundle_pano(pano: Panorama) -> Pano:
     return Pano(
         id=str(pano.id),
         level_id=pano.level_id,
@@ -199,7 +207,7 @@ async def publish(map_id: uuid.UUID, db: DbSession, user: CurrentUser) -> Publis
         select(Panorama).where(Panorama.map_id == map_id, Panorama.status == PanoramaStatus.READY)
     )
     document = MapDocument.model_validate(found.draft).model_copy(
-        update={"panos": [_bundle_pano(p) for p in panoramas if p.tiles]}
+        update={"panos": [bundle_pano(p) for p in panoramas if p.tiles]}
     )
     bundle: dict[str, Any] = document.model_dump(mode="json", by_alias=True)
     last = await db.scalar(select(func.max(MapVersion.number)).where(MapVersion.map_id == map_id))
@@ -216,6 +224,53 @@ async def publish(map_id: uuid.UUID, db: DbSession, user: CurrentUser) -> Publis
     return PublishOut(
         version_id=version.id, number=version.number, status=version.status, slug=found.slug
     )
+
+
+@router.get("/{map_id}/versions", response_model=list[VersionOut])
+async def list_versions(map_id: uuid.UUID, db: DbSession, user: CurrentUser) -> list[VersionOut]:
+    """Published versions, newest first; one of them may be the one visitors see."""
+    found = await member_map(db, map_id, user, Permission.VIEW)
+    rows = await db.execute(
+        select(MapVersion.id, MapVersion.number, MapVersion.created_at)
+        .where(MapVersion.map_id == map_id, MapVersion.status == VersionStatus.READY)
+        .order_by(MapVersion.number.desc())
+        .limit(50)
+    )
+    return [
+        VersionOut(number=n, created_at=at, published=vid == found.published_version_id)
+        for vid, n, at in rows
+    ]
+
+
+@router.post("/{map_id}/versions/{number}/publish", response_model=PublishOut)
+async def republish_version(
+    map_id: uuid.UUID, number: int, db: DbSession, user: CurrentUser
+) -> PublishOut:
+    """Back to an earlier version: visitors see it again, the link stays; the draft is untouched."""
+    found = await member_map(db, map_id, user, Permission.PUBLISH)
+    await db.refresh(found, with_for_update=True)
+    version = await db.scalar(
+        select(MapVersion).where(MapVersion.map_id == map_id, MapVersion.number == number)
+    )
+    if version is None or version.bundle is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Версия не найдена")
+    if not members_only(found.access_mode):
+        await bundles.write_static(map_id, version.number, version.bundle)
+    found.published_version_id = version.id
+    await db.commit()
+    return PublishOut(
+        version_id=version.id, number=version.number, status=version.status, slug=found.slug
+    )
+
+
+@router.post("/{map_id}/unpublish", status_code=status.HTTP_204_NO_CONTENT)
+async def unpublish(map_id: uuid.UUID, db: DbSession, user: CurrentUser) -> None:
+    """Visitors get "not published" again; versions are kept and can be published back."""
+    found = await member_map(db, map_id, user, Permission.PUBLISH)
+    await db.refresh(found, with_for_update=True)
+    found.published_version_id = None
+    await run_in_threadpool(bundles.remove_static, map_id)
+    await db.commit()
 
 
 @router.post("/{map_id}/assets", response_model=AssetOut, status_code=status.HTTP_201_CREATED)

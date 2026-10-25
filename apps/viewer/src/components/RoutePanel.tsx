@@ -7,7 +7,8 @@ import {
   stepDistance,
 } from "@ttkpr/map-core";
 import { Button, cn } from "@ttkpr/ui";
-import { Accessibility, View } from "lucide-react";
+import { Accessibility, Share2, View } from "lucide-react";
+import { useState } from "react";
 import { StepIcon } from "./StepIcon";
 
 interface Props {
@@ -87,10 +88,13 @@ export function RoutePanel({
         </div>
         {stairsToggle}
       </div>
-      <Button className="w-full" disabled={panoCount === 0} onClick={onWalk}>
-        <View className="size-5" aria-hidden />
-        {panoCount > 0 ? "Пройти по панорамам" : "На этом пути нет панорам"}
-      </Button>
+      <div className="flex gap-2">
+        <Button className="min-w-0 flex-1" disabled={panoCount === 0} onClick={onWalk}>
+          <View className="size-5" aria-hidden />
+          {panoCount > 0 ? "Пройти по панорамам" : "На этом пути нет панорам"}
+        </Button>
+        <ShareRoute />
+      </div>
       {panoCount > 0 && gapM > 20 && (
         <p className="text-center text-xs text-muted">Панорамы есть не на всём пути</p>
       )}
@@ -115,5 +119,34 @@ export function RoutePanel({
         ))}
       </ol>
     </section>
+  );
+}
+
+/** The route is all in the link: the phone's share sheet, or the clipboard on a computer. */
+function ShareRoute() {
+  const [copied, setCopied] = useState(false);
+  const share = async () => {
+    const url = new URL(window.location.href);
+    for (const key of ["walk", "pano", "level", "preview"]) url.searchParams.delete(key);
+    const link = url.toString();
+    if (navigator.share) {
+      await navigator.share({ title: document.title, url: link }).catch(() => undefined);
+      return;
+    }
+    await navigator.clipboard?.writeText(link).catch(() => undefined);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <Button
+      variant="secondary"
+      className="shrink-0 px-3"
+      aria-label="Поделиться маршрутом"
+      title="Поделиться маршрутом"
+      onClick={() => void share()}
+    >
+      <Share2 className="size-5" aria-hidden />
+      {copied && <span className="text-sm">Скопировано</span>}
+    </Button>
   );
 }

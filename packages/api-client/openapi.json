@@ -565,6 +565,144 @@
         }
       }
     },
+    "/api/maps/{map_id}/versions": {
+      "get": {
+        "tags": [
+          "maps"
+        ],
+        "summary": "List Versions",
+        "description": "Published versions, newest first; one of them may be the one visitors see.",
+        "operationId": "list_versions",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Map Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VersionOut"
+                  },
+                  "title": "Response List Versions"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/maps/{map_id}/versions/{number}/publish": {
+      "post": {
+        "tags": [
+          "maps"
+        ],
+        "summary": "Republish Version",
+        "description": "Back to an earlier version: visitors see it again, the link stays; the draft is untouched.",
+        "operationId": "republish_version",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Map Id"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/maps/{map_id}/unpublish": {
+      "post": {
+        "tags": [
+          "maps"
+        ],
+        "summary": "Unpublish",
+        "description": "Visitors get \"not published\" again; versions are kept and can be published back.",
+        "operationId": "unpublish",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Map Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/maps/{map_id}/assets": {
       "post": {
         "tags": [
@@ -1960,6 +2098,52 @@
         }
       }
     },
+    "/api/public/maps/{slug}/unlock": {
+      "post": {
+        "tags": [
+          "public"
+        ],
+        "summary": "Unlock Map",
+        "description": "A password map: the right password sets a cookie that opens this map for 30 days.",
+        "operationId": "unlock_map",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MapUnlock"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/public/maps/{slug}/manifest.json": {
       "get": {
         "tags": [
@@ -2044,6 +2228,47 @@
                   "additionalProperties": true,
                   "title": "Response Get Bundle"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/maps/{slug}/draft.json": {
+      "get": {
+        "tags": [
+          "public"
+        ],
+        "summary": "Get Draft Bundle",
+        "description": "Studio preview: the current draft with ready panoramas, as visitors would see it after\npublishing. Team members only; strangers get 404, so drafts of other maps do not leak.",
+        "operationId": "get_draft_bundle",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -3538,6 +3763,11 @@
             "type": "array",
             "title": "Permissions",
             "description": "See api.permissions"
+          },
+          "hasPassword": {
+            "type": "boolean",
+            "title": "Haspassword",
+            "default": false
           }
         },
         "type": "object",
@@ -3550,6 +3780,21 @@
           "updatedAt"
         ],
         "title": "MapSummary"
+      },
+      "MapUnlock": {
+        "properties": {
+          "password": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "title": "MapUnlock"
       },
       "MapUpdate": {
         "properties": {
@@ -3587,8 +3832,21 @@
               {
                 "type": "null"
               }
+            ]
+          },
+          "accessPassword": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 4
+              },
+              {
+                "type": "null"
+              }
             ],
-            "description": "\"password\" is not supported yet and is refused with 422"
+            "title": "Accesspassword",
+            "description": "Required to switch to \"password\""
           }
         },
         "type": "object",
@@ -5398,6 +5656,30 @@
           "anchor"
         ],
         "title": "Venue"
+      },
+      "VersionOut": {
+        "properties": {
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Createdat"
+          },
+          "published": {
+            "type": "boolean",
+            "title": "Published"
+          }
+        },
+        "type": "object",
+        "required": [
+          "number",
+          "createdAt",
+          "published"
+        ],
+        "title": "VersionOut"
       },
       "VersionStatus": {
         "type": "string",

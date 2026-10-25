@@ -147,17 +147,17 @@ async def test_private_map_hidden_from_visitors(client: AsyncClient, register: R
     ).status_code == 403
 
 
-async def test_password_mode_is_refused_and_never_served_as_public(
+async def test_password_mode_needs_a_password_and_is_never_public(
     client: AsyncClient, register: Register, db_sessionmaker: async_sessionmaker[AsyncSession]
 ) -> None:
     await register("owner@example.com")
     created = await _new_map(client)
     refused = await client.patch(f"/api/maps/{created['id']}", json={"accessMode": "password"})
     assert refused.status_code == 422
-    assert "по паролю" in refused.json()["detail"]
+    assert "пароль" in refused.json()["detail"]
     assert (await client.get(f"/api/maps/{created['id']}")).json()["accessMode"] == "link"
 
-    # A map stored as "password" earlier: members only until passwords exist.
+    # A map stored as "password" without one: members only, never a static file.
     await client.post(f"/api/maps/{created['id']}/publish")
     async with db_sessionmaker() as db:
         await db.execute(
@@ -169,10 +169,10 @@ async def test_password_mode_is_refused_and_never_served_as_public(
     manifest = f"/api/public/maps/{created['slug']}/manifest.json"
     assert (await client.get(manifest)).status_code == 200  # the owner
     await client.post("/api/auth/logout")
-    assert (await client.get(manifest)).status_code == 403
+    assert (await client.get(manifest)).status_code == 401
     assert (
         await client.get(f"/api/public/maps/{created['slug']}/v/1/bundle.json")
-    ).status_code == 403
+    ).status_code == 401
 
 
 async def test_phone_capture_with_token(
@@ -309,3 +309,68 @@ async def test_visitor_events_become_organizer_stats(
     assert stats["days"][-1]["views"] == 2
     assert stats["topPois"] == [{"key": "p-1", "label": "p-1", "count": 1}]
     assert stats["misses"][0]["key"] == "туалет"
+
+
+async def test_draft_preview_for_team_only(client: AsyncClient, register: Register) -> None:
+    """The studio preview reads the draft before any publishing; strangers get 404."""
+    await register("owner@example.com")
+    created = (await client.post("/api/maps", json={"title": "Черновик"})).json()
+    url = f"/api/public/maps/{created['slug']}/draft.json"
+    draft = await client.get(url)
+    assert draft.status_code == 200, draft.text
+    assert draft.headers["cache-control"] == "private, no-store"
+    assert draft.json()["venue"]["name"]
+
+    await client.post("/api/auth/logout")
+    assert (await client.get(url)).status_code == 404
+    await register("stranger@example.com")
+    assert (await client.get(url)).status_code == 404
+
+
+async def test_password_map(client: AsyncClient, register: Register) -> None:
+    """A password map: strangers get 401, the right password opens it, a new one locks again."""
+    await register("owner@example.com")
+    created = (await client.post("/api/maps", json={"title": "По паролю"})).json()
+    map_url = f"/api/maps/{created['id']}"
+    no_password = await client.patch(map_url, json={"accessMode": "password"})
+    assert no_password.status_code == 422
+    set_it = await client.patch(map_url, json={"accessMode": "password", "accessPassword": "сова1"})
+    assert set_it.status_code == 200 and set_it.json()["hasPassword"] is True
+    await client.post(f"{map_url}/publish")
+
+    await client.post("/api/auth/logout")
+    manifest = f"/api/public/maps/{created['slug']}/manifest.json"
+    assert (await client.get(manifest)).status_code == 401
+    unlock = f"/api/public/maps/{created['slug']}/unlock"
+    assert (await client.post(unlock, json={"password": "нет"})).status_code == 403
+    assert (await client.post(unlock, json={"password": "сова1"})).status_code == 204
+    opened = await client.get(manifest)
+    assert opened.status_code == 200, opened.text
+    bundle = await client.get(opened.json()["bundleUrl"])
+    assert bundle.status_code == 200
+
+    await client.post(
+        "/api/auth/login", json={"email": "owner@example.com", "password": "password123"}
+    )
+    await client.patch(map_url, json={"accessPassword": "новый-пароль"})
+    await client.post("/api/auth/logout")
+    assert (await client.get(manifest)).status_code == 401
+
+
+async def test_versions_rollback_and_unpublish(client: AsyncClient, register: Register) -> None:
+    await register("owner@example.com")
+    created = (await client.post("/api/maps", json={"title": "Версии"})).json()
+    map_url = f"/api/maps/{created['id']}"
+    await client.post(f"{map_url}/publish")
+    await client.post(f"{map_url}/publish")
+    versions = (await client.get(f"{map_url}/versions")).json()
+    assert [(v["number"], v["published"]) for v in versions] == [(2, True), (1, False)]
+
+    back = await client.post(f"{map_url}/versions/1/publish")
+    assert back.status_code == 200 and back.json()["number"] == 1
+    manifest = f"/api/public/maps/{created['slug']}/manifest.json"
+    assert (await client.get(manifest)).json()["version"] == 1
+
+    assert (await client.post(f"{map_url}/unpublish")).status_code == 204
+    assert (await client.get(manifest)).status_code == 404
+    assert (await client.get(map_url)).json()["publishedNumber"] is None

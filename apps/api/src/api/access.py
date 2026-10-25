@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import uuid
 
 from fastapi import HTTPException, Request, status
@@ -11,8 +13,27 @@ from api.permissions import Permission, allowed
 
 
 def members_only(mode: str) -> bool:
-    """Private maps, and "password" ones until passwords exist: fail closed, never public."""
+    """Private and password maps: never a static file, every read goes through the API checks."""
     return mode in (AccessMode.PRIVATE, AccessMode.PASSWORD)
+
+
+def map_key_cookie(map_id: uuid.UUID) -> str:
+    return f"ttk_map_{map_id.hex[:16]}"
+
+
+def map_key(found: Map) -> str:
+    """What the unlock cookie holds: tied to the map and its current password, so changing the
+    password (or the secret) locks everyone out again."""
+    secret = get_settings().secret_key.encode()
+    message = f"{found.id}:{found.access_password_hash}".encode()
+    return hmac.new(secret, message, hashlib.sha256).hexdigest()
+
+
+def unlocked(request: Request, found: Map) -> bool:
+    if found.access_mode != AccessMode.PASSWORD or not found.access_password_hash:
+        return False
+    given = request.cookies.get(map_key_cookie(found.id), "")
+    return hmac.compare_digest(given, map_key(found))
 
 
 async def member_access(db: DbSession, map_id: uuid.UUID, user: User) -> tuple[Map, MemberRole]:

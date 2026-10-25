@@ -675,6 +675,20 @@ export type MapSummary = {
      * See api.permissions
      */
     permissions?: Array<string>;
+    /**
+     * Haspassword
+     */
+    hasPassword?: boolean;
+};
+
+/**
+ * MapUnlock
+ */
+export type MapUnlock = {
+    /**
+     * Password
+     */
+    password: string;
 };
 
 /**
@@ -691,10 +705,13 @@ export type MapUpdate = {
      * Short link /m/{slug}: 3-32 latin letters, digits and dashes
      */
     slug?: string | null;
-    /**
-     * "password" is not supported yet and is refused with 422
-     */
     accessMode?: AccessMode | null;
+    /**
+     * Accesspassword
+     *
+     * Required to switch to "password"
+     */
+    accessPassword?: string | null;
 };
 
 /**
@@ -1723,6 +1740,24 @@ export type Venue = {
 };
 
 /**
+ * VersionOut
+ */
+export type VersionOut = {
+    /**
+     * Number
+     */
+    number: number;
+    /**
+     * Createdat
+     */
+    createdAt: string;
+    /**
+     * Published
+     */
+    published: boolean;
+};
+
+/**
  * VersionStatus
  */
 export type VersionStatus = 'building' | 'ready' | 'failed';
@@ -2154,6 +2189,102 @@ export type PublishResponses = {
 };
 
 export type PublishResponse = PublishResponses[keyof PublishResponses];
+
+export type ListVersionsData = {
+    body?: never;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/versions';
+};
+
+export type ListVersionsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListVersionsError = ListVersionsErrors[keyof ListVersionsErrors];
+
+export type ListVersionsResponses = {
+    /**
+     * Response List Versions
+     *
+     * Successful Response
+     */
+    200: Array<VersionOut>;
+};
+
+export type ListVersionsResponse = ListVersionsResponses[keyof ListVersionsResponses];
+
+export type RepublishVersionData = {
+    body?: never;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+        /**
+         * Number
+         */
+        number: number;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/versions/{number}/publish';
+};
+
+export type RepublishVersionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RepublishVersionError = RepublishVersionErrors[keyof RepublishVersionErrors];
+
+export type RepublishVersionResponses = {
+    /**
+     * Successful Response
+     */
+    200: PublishOut;
+};
+
+export type RepublishVersionResponse = RepublishVersionResponses[keyof RepublishVersionResponses];
+
+export type UnpublishData = {
+    body?: never;
+    path: {
+        /**
+         * Map Id
+         */
+        map_id: string;
+    };
+    query?: never;
+    url: '/api/maps/{map_id}/unpublish';
+};
+
+export type UnpublishErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnpublishError = UnpublishErrors[keyof UnpublishErrors];
+
+export type UnpublishResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type UnpublishResponse = UnpublishResponses[keyof UnpublishResponses];
 
 export type UploadAssetData = {
     body: BodyUploadAsset;
@@ -3038,6 +3169,36 @@ export type GetLiveResponses = {
 
 export type GetLiveResponse = GetLiveResponses[keyof GetLiveResponses];
 
+export type UnlockMapData = {
+    body: MapUnlock;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/public/maps/{slug}/unlock';
+};
+
+export type UnlockMapErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnlockMapError = UnlockMapErrors[keyof UnlockMapErrors];
+
+export type UnlockMapResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type UnlockMapResponse = UnlockMapResponses[keyof UnlockMapResponses];
+
 export type GetManifestData = {
     body?: never;
     path: {
@@ -3105,6 +3266,34 @@ export type GetBundleResponses = {
 };
 
 export type GetBundleResponse = GetBundleResponses[keyof GetBundleResponses];
+
+export type GetDraftBundleData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/public/maps/{slug}/draft.json';
+};
+
+export type GetDraftBundleErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDraftBundleError = GetDraftBundleErrors[keyof GetDraftBundleErrors];
+
+export type GetDraftBundleResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type RecordEventsData = {
     body?: never;
