@@ -33,3 +33,17 @@
   box-shadow: 0 2px 10px rgb(0 0 0 / 0.3);
   white-space: nowrap;
 }
+
+/* Studio tour: the lit block's outline breathes so a small tool button is easy to spot. */
+@keyframes tour-spot {
+  0%,
+  100% {
+    outline: 0 solid rgb(56 189 248 / 0.5);
+  }
+  50% {
+    outline: 7px solid rgb(56 189 248 / 0.18);
+  }
+}
+.tour-spot {
+  animation: tour-spot 1.6s ease-in-out infinite;
+}

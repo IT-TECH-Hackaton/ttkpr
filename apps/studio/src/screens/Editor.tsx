@@ -17,6 +17,7 @@ import {
   TopRight,
   ZoomControls,
 } from "../components/editor/Chrome";
+import { markTourSeen, StudioTour, tourPending } from "../components/editor/Tour";
 import { Inspector } from "../components/Inspector";
 import { unwrap } from "../lib/api";
 import {
@@ -141,6 +142,12 @@ function EditorLayout(props: LayoutProps) {
   const saveError = useDraft((s) => s.saveError);
   const { undo, redo } = useStore(useDraft.temporal);
   const [help, setHelp] = useState(false);
+  // The tour starts by itself the first time this device opens the editor.
+  const [tour, setTour] = useState(tourPending);
+  const closeTour = () => {
+    setTour(false);
+    markTourSeen();
+  };
   const [inspectorOpen, setInspectorOpen] = useState(
     () => window.matchMedia("(min-width: 768px)").matches,
   );
@@ -270,6 +277,7 @@ function EditorLayout(props: LayoutProps) {
       {inspectorOpen ? (
         <aside
           aria-label="Свойства"
+          data-tour="inspector"
           className="absolute bottom-24 right-3 top-20 z-10 flex w-[min(22rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl bg-bg shadow-2xl max-md:inset-x-3 max-md:bottom-[7.5rem] max-md:top-auto max-md:max-h-[50dvh] max-md:w-auto"
         >
           <div className="flex items-center justify-between border-b border-border px-4 py-2">
@@ -291,6 +299,7 @@ function EditorLayout(props: LayoutProps) {
         <button
           type="button"
           onClick={() => setInspectorOpen(true)}
+          data-tour="inspector"
           className={cn(panel, "absolute right-3 top-20 z-10 px-3 py-2 text-sm")}
         >
           Свойства
@@ -328,7 +337,16 @@ function EditorLayout(props: LayoutProps) {
           e.target.value = "";
         }}
       />
-      {help && <HelpDialog onClose={() => setHelp(false)} />}
+      {help && (
+        <HelpDialog
+          onClose={() => setHelp(false)}
+          onStartTour={() => {
+            setHelp(false);
+            setTour(true);
+          }}
+        />
+      )}
+      {tour && <StudioTour onClose={closeTour} />}
     </div>
   );
 }

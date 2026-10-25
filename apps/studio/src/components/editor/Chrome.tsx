@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import type { MapSummary } from "@ttkpr/api-client";
 import { bundleBounds, CONNECTOR_LABELS, POI_CATEGORIES, sortedLevels } from "@ttkpr/map-core";
-import { cn } from "@ttkpr/ui";
+import { Button, cn } from "@ttkpr/ui";
 import {
   Armchair,
   Camera,
@@ -397,6 +397,7 @@ export function TopRight({
             useDraft.getState().setHint(`Опубликовать пока нельзя: ${PUBLISH_BLOCKED[saveState]}`);
           }}
           disabled={publishing}
+          aria-label="Опубликовать"
           title={
             saveState !== "saved" ? PUBLISH_BLOCKED[saveState] : "Опубликовать: ссылка не меняется"
           }
@@ -743,7 +744,13 @@ export function ZoomControls() {
   );
 }
 
-export function HelpDialog({ onClose }: { onClose: () => void }) {
+export function HelpDialog({
+  onClose,
+  onStartTour,
+}: {
+  onClose: () => void;
+  onStartTour: () => void;
+}) {
   return (
     <div
       role="dialog"
@@ -762,6 +769,9 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
         <h2 id="help-title" className="text-xl font-semibold">
           Как быстро сделать карту
         </h2>
+        <Button variant="secondary" className="w-full" onClick={onStartTour}>
+          Пройти обучение ещё раз
+        </Button>
         {/* Phones: taps instead of hotkeys and hovering. */}
         <ol className="list-decimal space-y-2 pl-5 text-sm lg:hidden">
           <li>Инструменты — на нижней панели, она листается вбок.</li>
