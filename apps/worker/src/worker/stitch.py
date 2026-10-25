@@ -13,7 +13,7 @@ matched without the sensor gate, the focal length is estimated from the pair hom
 pairwise rotations are averaged globally (closes the loop of a full turn), the adjustment uses
 loose priors and the horizon is levelled from the camera axes (wave correction).
 
-Conventions (CLAUDE.md): OpenCV camera axes (x right, y down, z forward); world x east,
+Conventions (docs/CONVENTIONS.md): OpenCV camera axes (x right, y down, z forward); world x east,
 y north, z up. Equirect: yaw 0 in the image centre (= first frame's direction), yaw grows to
 the right (clockwise seen from above), pitch +90 at the top row.
 """

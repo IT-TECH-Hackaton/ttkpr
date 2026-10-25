@@ -5,7 +5,7 @@ Safari) and, when the browser gives motion sensors, an orientation track (``orie
 
     {"samples": [{"t": seconds from video start, "q": [w, x, y, z]}], "fovDeg": number | null}
 
-``q`` is camera -> world exactly as for photo frames (CLAUDE.md): OpenCV camera axes of the image as
+``q`` is camera -> world exactly as for photo frames (docs/CONVENTIONS.md): OpenCV camera axes of the image as
 decoded (x right, y down, z forward), world aligned with gravity (z up), arbitrary azimuth.
 
 One decoding pass measures every frame cheaply: timestamp, sharpness (variance of the Laplacian),

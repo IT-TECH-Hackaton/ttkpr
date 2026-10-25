@@ -2,7 +2,7 @@
 // DeviceOrientationEvent (W3C): R_device->earth = Rz(alpha) · Rx(beta) · Ry(gamma); earth x east,
 // y north, z up (alpha may be relative to an arbitrary start, which is fine for stitching).
 // Device axes: x right, y up the screen, z out of the screen. The back camera looks along -z.
-// Camera axes (OpenCV, CLAUDE.md): x right, y down, z forward => R_cam = R_device · diag(1,-1,-1).
+// Camera axes (OpenCV, docs/CONVENTIONS.md): x right, y down, z forward => R_cam = R_device · diag(1,-1,-1).
 
 export type Vec3 = [number, number, number];
 /** Row-major 3x3. */

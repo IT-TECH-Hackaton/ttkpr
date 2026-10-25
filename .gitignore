@@ -21,7 +21,6 @@ __pycache__/
 .env.production
 *.pem
 *.key
-.claude/settings.local.json
 
 # Данные (съёмки, тома контейнеров)
 data/

@@ -16,7 +16,6 @@ data
 infra/volumes
 .git
 .github
-.claude
 **/.env
 **/.env.*
 !**/.env.example

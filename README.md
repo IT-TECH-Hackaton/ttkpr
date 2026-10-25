@@ -62,7 +62,7 @@ docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build
 docker compose -f infra/docker-compose.yml --env-file infra/.env --profile seed run --rm seed > data/test-accounts.md
 ```
 
-Адреса: `https://SITE_HOST/` — посетитель, `https://SITE_HOST/studio/` — студия, `https://SITE_HOST/m/demo-ploschadka-hakatona` — опубликованная демо-карта. Сертификат по IP выдаёт внутренний CA Caddy — браузер один раз попросит подтвердить. Для доступа из интернета нужен домен (Caddy сам получит сертификат) или туннель: тогда задайте `PUBLIC_URL`, чтобы ссылки и QR вели на него. Команды проверок — в [CLAUDE.md](CLAUDE.md#команды).
+Адреса: `https://SITE_HOST/` — посетитель, `https://SITE_HOST/studio/` — студия, `https://SITE_HOST/m/demo-ploschadka-hakatona` — опубликованная демо-карта. Сертификат по IP выдаёт внутренний CA Caddy — браузер один раз попросит подтвердить. Для доступа из интернета нужен домен (Caddy сам получит сертификат) или туннель: тогда задайте `PUBLIC_URL`, чтобы ссылки и QR вели на него. Команды проверок — в разделе [«Проверки»](#проверки).
 
 ## Развёртывание на сервер (одной командой)
 
@@ -130,12 +130,16 @@ type infra\deploy\harden-server.sh | ssh -i $env:USERPROFILE\.ssh\ttkpr_deploy r
 
 Скрипт откажется, если в `/root/.ssh/authorized_keys` нет ключей, и проверяет конфигурацию `sshd -t` перед применением. Разбанить адрес: `fail2ban-client set sshd unbanip <ip>`.
 
+## Проверки
+
+- `pnpm lint` · `pnpm typecheck` · `pnpm test` · `pnpm build` — фронтенд (Biome, TypeScript, Vitest).
+- `pnpm --filter @ttkpr/viewer e2e` — офлайн, маршруты и справка в собранной карте (Playwright).
+- `uv run ruff check .` · `uv run mypy packages/map-schema/src apps/api/src apps/worker/src` · `uv run pytest` — Python; тесты API с базой — с `TEST_DATABASE_URL=postgresql+asyncpg://…`.
+- `pnpm gen:api` — после изменения схемы или ручек API (CI проверяет, что клиент закоммичен).
+- Соглашения по координатам и углам — [docs/CONVENTIONS.md](docs/CONVENTIONS.md).
+
 ## Что умеет
 
 Подробно по пунктам ТЗ — [docs/TZ.md](docs/TZ.md).
 - **Посетитель:** план с этажами, 3D-видом и 3D-макетом этажа по фотографиям, поиск, карточки мест, маршрут «откуда → куда» (двери, лестницы, лифты, «без ступенек», дорожки между зданиями), проход маршрута по панорамам, маршруты организатора (экскурсии), QR «Вы здесь», офлайн, светлая и тёмная тема, раскладка для телефона и для широкого экрана.
 - **Организатор:** редактор плана (комнаты, контуры, двери, лестницы, точки, дорожки, панорамы, точки прямо в панораме), распознавание комнат по картинке плана, проверка связности маршрутов, экскурсии со ссылкой, съёмка панорам с телефона, публикация без смены ссылки, команда и роли, статистика посещений (места, маршруты, поиски без результата).
-
-## Claude Code
-
-Правила проекта для Claude — в [CLAUDE.md](CLAUDE.md), специализированные субагенты — в [.claude/agents](.claude/agents). Включите плагины из Anthropic Directory: **context7**, **playwright**, **github**, **frontend-design**, **code-review**, **docker-skills**.

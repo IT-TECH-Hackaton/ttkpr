@@ -12,7 +12,7 @@
       "!**/src/gen",
       "!**/public/demo",
       "!**/openapi.json",
-      "!.claude",
+      "!.*",
       "!pnpm-lock.yaml",
       "!fixtures/demo-map.json"
     ]

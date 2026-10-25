@@ -1,7 +1,7 @@
 """Local ENU frame and plan <-> panorama projections.
 
 Must stay identical to packages/map-core/src/geo.ts; both are checked against
-fixtures/geo-vectors.json. Conventions are documented in CLAUDE.md.
+fixtures/geo-vectors.json. Conventions are documented in docs/CONVENTIONS.md.
 """
 
 import math

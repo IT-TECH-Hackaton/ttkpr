@@ -1,6 +1,6 @@
 // Local ENU frame and plan <-> panorama projections.
 // Must stay identical to packages/map-schema/src/map_schema/geo.py; both are checked
-// against fixtures/geo-vectors.json. Conventions are documented in CLAUDE.md.
+// against fixtures/geo-vectors.json. Conventions are documented in docs/CONVENTIONS.md.
 
 export type LonLat = [lon: number, lat: number];
 export type XY = [x: number, y: number];
