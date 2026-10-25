@@ -151,3 +151,122 @@ export function doorOnWall(
     fromLocal(anchor, [cx + ux * half, cy + uy * half]),
   ];
 }
+
+const MIN_DOOR_M = 0.3;
+
+function along(origin: XY, dir: XY, p: XY): number {
+  return (p[0] - origin[0]) * dir[0] + (p[1] - origin[1]) * dir[1];
+}
+
+function atT(origin: XY, dir: XY, t: number): XY {
+  return [origin[0] + dir[0] * t, origin[1] + dir[1] * t];
+}
+
+/** The wall under the door, or the door's own direction when it sits on none. */
+function doorAxis(
+  doc: MapDocument,
+  levelId: string,
+  line: LonLat[],
+): { origin: XY; dir: XY; min: number; max: number } | null {
+  const anchor = doc.venue.anchor;
+  const a = toLocal(anchor, line[0] as LonLat);
+  const b = toLocal(anchor, line[line.length - 1] as LonLat);
+  const span = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const mid: XY = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  let best: { seg: Segment; dist: number } | null = null;
+  for (const seg of segments(levelRings(doc, levelId))) {
+    const hit = closestOnSegment(mid, seg);
+    if (!best || hit.dist < best.dist) best = { seg, dist: hit.dist };
+  }
+  if (best && best.dist <= 0.75) {
+    const [s0, s1] = best.seg;
+    const len = Math.hypot(s1[0] - s0[0], s1[1] - s0[1]);
+    if (len < 1e-6) return null;
+    return {
+      origin: s0,
+      dir: [(s1[0] - s0[0]) / len, (s1[1] - s0[1]) / len],
+      min: 0,
+      max: len,
+    };
+  }
+  if (span < 1e-6) return null;
+  return {
+    origin: a,
+    dir: [(b[0] - a[0]) / span, (b[1] - a[1]) / span],
+    min: -30,
+    max: span + 30,
+  };
+}
+
+export function doorLength(anchor: LonLat, line: LonLat[]): number {
+  if (line.length < 2) return 0;
+  const a = toLocal(anchor, line[0] as LonLat);
+  const b = toLocal(anchor, line[line.length - 1] as LonLat);
+  return Math.hypot(b[0] - a[0], b[1] - a[1]);
+}
+
+/** Set the door's length, keeping its centre and staying on the wall. */
+export function resizeDoor(
+  doc: MapDocument,
+  levelId: string,
+  line: LonLat[],
+  lengthM: number,
+): [LonLat, LonLat] | null {
+  if (line.length < 2) return null;
+  const axis = doorAxis(doc, levelId, line);
+  if (!axis) return null;
+  const anchor = doc.venue.anchor;
+  const ta = along(axis.origin, axis.dir, toLocal(anchor, line[0] as LonLat));
+  const tb = along(axis.origin, axis.dir, toLocal(anchor, line[line.length - 1] as LonLat));
+  const center = (ta + tb) / 2;
+  const room = Math.max(0, axis.max - axis.min);
+  const length = Math.min(Math.max(lengthM, MIN_DOOR_M), 30, room || MIN_DOOR_M);
+  let start = center - length / 2;
+  let end = center + length / 2;
+  if (start < axis.min) {
+    end += axis.min - start;
+    start = axis.min;
+  }
+  if (end > axis.max) {
+    start -= end - axis.max;
+    end = axis.max;
+  }
+  start = Math.max(axis.min, start);
+  end = Math.min(axis.max, end);
+  const t0 = ta <= tb ? start : end;
+  const t1 = ta <= tb ? end : start;
+  return [
+    fromLocal(anchor, atT(axis.origin, axis.dir, t0)),
+    fromLocal(anchor, atT(axis.origin, axis.dir, t1)),
+  ];
+}
+
+/** Pull one end along the wall. The other end stays. */
+export function stretchDoor(
+  doc: MapDocument,
+  levelId: string,
+  line: LonLat[],
+  end: 0 | 1,
+  pointer: LonLat,
+): [LonLat, LonLat] | null {
+  if (line.length < 2) return null;
+  const axis = doorAxis(doc, levelId, line);
+  if (!axis) return null;
+  const anchor = doc.venue.anchor;
+  const fixed = toLocal(anchor, line[end === 0 ? line.length - 1 : 0] as LonLat);
+  const fixedT = along(axis.origin, axis.dir, fixed);
+  let nextT = along(axis.origin, axis.dir, toLocal(anchor, pointer));
+  nextT = Math.max(axis.min, Math.min(axis.max, nextT));
+  if (Math.abs(nextT - fixedT) < MIN_DOOR_M) {
+    const sign = nextT >= fixedT ? 1 : -1;
+    const candidate = fixedT + sign * MIN_DOOR_M;
+    const towardMax = axis.max - fixedT;
+    const towardMin = fixedT - axis.min;
+    if (candidate >= axis.min && candidate <= axis.max) nextT = candidate;
+    else if (Math.max(towardMax, towardMin) < MIN_DOOR_M - 1e-6) nextT = fixedT;
+    else nextT = towardMax >= towardMin ? fixedT + towardMax : fixedT - towardMin;
+  }
+  const moving = atT(axis.origin, axis.dir, nextT);
+  const coords: XY[] = end === 0 ? [moving, fixed] : [fixed, moving];
+  return [fromLocal(anchor, coords[0] as XY), fromLocal(anchor, coords[1] as XY)];
+}

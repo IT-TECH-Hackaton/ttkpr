@@ -134,6 +134,16 @@ const isTyping = (target: EventTarget | null) =>
   target instanceof HTMLTextAreaElement ||
   target instanceof HTMLSelectElement;
 
+const canDuplicate = (id: string) => {
+  const doc = useDraft.getState().doc;
+  return (
+    doc.units?.some((u) => u.id === id) ||
+    doc.fixtures?.some((f) => f.id === id) ||
+    doc.pois?.some((p) => p.id === id) ||
+    false
+  );
+};
+
 function EditorLayout(props: LayoutProps) {
   const { map, published, staleBackup } = props;
   const panos = usePanoramas(map.id);
@@ -172,26 +182,43 @@ function EditorLayout(props: LayoutProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const canEdit = can(map, "edit");
   const canCapture = can(map, "capture");
+  const copiedId = useRef<string | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTyping(e.target)) return;
       const s = useDraft.getState();
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (e.shiftKey) redo();
         else undo();
         return;
       }
+      if (mod && !e.altKey && !e.shiftKey && canEdit) {
+        const key = e.key.toLowerCase();
+        if (key === "c" && s.selectedId && canDuplicate(s.selectedId)) {
+          e.preventDefault();
+          copiedId.current = s.selectedId;
+          return;
+        }
+        if (key === "v" && copiedId.current && canDuplicate(copiedId.current)) {
+          e.preventDefault();
+          s.duplicate(copiedId.current);
+          const next = useDraft.getState().selectedId;
+          if (next && next !== copiedId.current) copiedId.current = next;
+          return;
+        }
+        if (key === "d" && s.selectedId && canDuplicate(s.selectedId)) {
+          e.preventDefault();
+          s.duplicate(s.selectedId);
+          return;
+        }
+      }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === "Escape") {
         if (s.tool !== "select") s.setTool("select");
         else s.select(null);
-        return;
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d" && s.selectedId && canEdit) {
-        e.preventDefault();
-        s.duplicate(s.selectedId);
         return;
       }
       if ((e.key === "Delete" || e.key === "Backspace") && s.selectedId && canEdit) {

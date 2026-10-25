@@ -1,7 +1,14 @@
 import type { MapDocument } from "@ttkpr/api-client";
 import { fromLocal, type LonLat, toLocal } from "@ttkpr/map-core";
 import { describe, expect, it } from "vitest";
-import { doorOnWall, metersPerPixel, rectangleRing, snapPoint } from "./snap";
+import {
+  doorOnWall,
+  metersPerPixel,
+  rectangleRing,
+  resizeDoor,
+  snapPoint,
+  stretchDoor,
+} from "./snap";
 
 const anchor: LonLat = [37.62, 55.754];
 const at = (x: number, y: number) => fromLocal(anchor, [x, y]);
@@ -73,6 +80,28 @@ describe("doorOnWall", () => {
 
   it("refuses to place a door away from walls", () => {
     expect(doorOnWall(doc, at(5, 3), "l1", 0.9, 1)).toBeNull();
+  });
+
+  it("changes the length from the properties and keeps the centre on the wall", () => {
+    const door = doorOnWall(doc, at(5, 0.2), "l1", 0.9, 1);
+    if (!door) throw new Error("door");
+    expect(resizeDoor(doc, "l1", door, 2)?.map(local)).toEqual([
+      [4, 0],
+      [6, 0],
+    ]);
+    const full = resizeDoor(doc, "l1", door, 100);
+    const xs = full?.flatMap(local) ?? [];
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(10);
+  });
+
+  it("pulls one end along the wall and leaves the other", () => {
+    const door = doorOnWall(doc, at(5, 0.2), "l1", 0.9, 1);
+    if (!door) throw new Error("door");
+    expect(stretchDoor(doc, "l1", door, 1, at(8, 0.2))?.map(local)).toEqual([
+      [4.55, 0],
+      [8, 0],
+    ]);
   });
 });
 

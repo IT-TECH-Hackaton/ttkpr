@@ -103,6 +103,8 @@ interface DraftState {
   addOpening: (a: Position, b: Position) => void;
   addConnector: (position: Position) => void;
   addFurniture: (position: Position, rotationDeg: number) => void;
+  /** A circle, square or polygon drawn with the furniture tool. */
+  addFixtureShape: (ring: Position[], name: string) => void;
   /** Everything on the map scaled about a point (fixing a plan drawn at the wrong size). */
   scalePlan: (factor: number, center: Position) => void;
   addPath: (coordinates: Position[]) => void;
@@ -117,6 +119,7 @@ interface DraftState {
   resizeUnit: (id: string, ring: Position[], openings: { id: string; line: Position[] }[]) => void;
   updatePoi: (id: string, patch: Partial<Poi>) => void;
   updateFixture: (id: string, patch: Partial<Fixture>) => void;
+  updateOpening: (id: string, patch: Partial<Opening>) => void;
   remove: (id: string) => void;
   addLevel: () => void;
   /** A new floor above with the current floor's rooms, doors and furniture (typical floors). */
@@ -279,6 +282,27 @@ export const useDraft = create<DraftState>()(
           // The tool stays: tables and chairs go in a row, click after click.
           return { doc: { ...s.doc, fixtures: [...(s.doc.fixtures ?? []), fixture] } };
         }),
+      addFixtureShape: (ring, name) =>
+        set((s) => {
+          const closed =
+            ring.length > 2 &&
+            ring[0]?.[0] === ring[ring.length - 1]?.[0] &&
+            ring[0]?.[1] === ring[ring.length - 1]?.[1]
+              ? ring
+              : [...ring, ring[0] as Position];
+          const fixture: Fixture = {
+            id: newId("f"),
+            levelId: s.levelId,
+            kind: "other",
+            name,
+            obstacle: true,
+            geometry: { type: "Polygon", coordinates: [closed] },
+          };
+          return {
+            doc: { ...s.doc, fixtures: [...(s.doc.fixtures ?? []), fixture] },
+            selectedId: fixture.id,
+          };
+        }),
       scalePlan: (factor, center) => set((s) => ({ doc: scaleDocument(s.doc, factor, center) })),
       addConnector: (position) =>
         set((s) => {
@@ -408,6 +432,13 @@ export const useDraft = create<DraftState>()(
           doc: {
             ...s.doc,
             fixtures: s.doc.fixtures?.map((f) => (f.id === id ? { ...f, ...patch } : f)),
+          },
+        })),
+      updateOpening: (id, patch) =>
+        set((s) => ({
+          doc: {
+            ...s.doc,
+            openings: s.doc.openings?.map((o) => (o.id === id ? { ...o, ...patch } : o)),
           },
         })),
       remove: (id) =>

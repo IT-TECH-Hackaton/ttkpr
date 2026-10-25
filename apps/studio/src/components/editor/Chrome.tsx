@@ -36,9 +36,9 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
-import { FURNITURE } from "../../lib/furniture";
+import { FURNITURE, FURNITURE_SHAPES } from "../../lib/furniture";
 import { localMapLink } from "../../lib/links";
 import { fitTo, gridSizeLabel, subscribeView, zoomIn, zoomOut } from "../../lib/mapView";
 import { can, ROLE_LABELS } from "../../lib/permissions";
@@ -73,7 +73,7 @@ export const TOOLS: ToolDef[] = [
     label: "Перемещение",
     key: "2",
     icon: <Move />,
-    hint: "Перетащите комнату, мебель, точку или панораму",
+    hint: "Перетащите комнату, мебель или точку. Двойной клик по ней — обратно к курсору",
     needs: "edit",
   },
   {
@@ -81,7 +81,7 @@ export const TOOLS: ToolDef[] = [
     label: "Комната",
     key: "3",
     icon: <Square />,
-    hint: "Два клика по углам. Двойной клик включает перемещение",
+    hint: "Два клика по углам. Двойной клик включает перемещение и возвращает к курсору",
     needs: "edit",
   },
   {
@@ -121,7 +121,7 @@ export const TOOLS: ToolDef[] = [
     label: "Мебель",
     key: "8",
     icon: <Armchair />,
-    hint: "Клик — стол, диван, стенд или растение. Двойной клик или двойное нажатие включает перемещение",
+    hint: "Клик — готовая мебель. Круг и квадрат — два клика, многоугольник — по контуру",
     needs: "edit",
   },
   {
@@ -508,6 +508,23 @@ export function Toolbar({ map, onUploadPlan }: { map: MapSummary; onUploadPlan: 
   const snapping = useDraft((s) => s.snapping);
   const { setTool, setOptions } = useDraft.getState();
   const tools = TOOLS.filter((t) => can(map, t.needs));
+  const scroller = useRef<HTMLDivElement>(null);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || tools.length === 0) return;
+    const update = () => {
+      setCanScrollRight(el.scrollWidth - el.clientWidth - el.scrollLeft > 4);
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      observer.disconnect();
+    };
+  }, [tools.length]);
   if (!can(map, "capture")) return null;
 
   const options: Partial<Record<Tool, ReactNode>> = {
@@ -554,7 +571,10 @@ export function Toolbar({ map, onUploadPlan }: { map: MapSummary; onUploadPlan: 
       <OptionMenu
         label="Что поставить"
         value={furniture}
-        options={FURNITURE.map((p) => ({ id: p.id, label: p.label }))}
+        options={[
+          ...FURNITURE_SHAPES.map((p) => ({ id: p.id, label: p.label })),
+          ...FURNITURE.map((p) => ({ id: p.id, label: p.label })),
+        ]}
         onChange={(v) => {
           setOptions({ furniture: v });
           setTool("furniture");
@@ -564,52 +584,58 @@ export function Toolbar({ map, onUploadPlan }: { map: MapSummary; onUploadPlan: 
   };
 
   return (
-    <div
-      role="toolbar"
-      aria-label="Инструменты"
-      className={cn(
-        panel,
-        "pointer-events-auto flex max-w-full snap-x items-center overflow-x-auto p-1 [scrollbar-width:none]",
-        // Phones: the tools scroll sideways; faded edges show there is more on either side.
-        "max-lg:[mask-image:linear-gradient(to_right,transparent,black_14px,black_calc(100%-28px),transparent)]",
-      )}
-    >
-      {tools.map((def) => (
-        <div key={def.id} className="flex items-center">
-          <ToolButton
-            def={def}
-            active={tool === def.id}
-            onClick={() => setTool(def.id)}
-            onDoubleClick={
-              def.id === "furniture" || def.id === "rect" ? () => setTool("move") : undefined
-            }
-          />
-          {options[def.id]}
-        </div>
-      ))}
-      {can(map, "edit") && (
-        <>
-          <span className="mx-1 h-7 w-px bg-white/15" />
-          <button
-            type="button"
-            title="Загрузить готовый план (картинка)"
-            aria-label="Загрузить план"
-            onClick={onUploadPlan}
-            className={iconButton}
-          >
-            <ImagePlus />
-          </button>
-          <button
-            type="button"
-            title={snapping ? "Привязка к углам, стенам и сетке 0,5 м: вкл" : "Привязка выключена"}
-            aria-label="Привязка"
-            aria-pressed={snapping}
-            onClick={() => setOptions({ snapping: !snapping })}
-            className={cn(iconButton, snapping && "text-sky-300")}
-          >
-            <Magnet />
-          </button>
-        </>
+    <div className={cn(panel, "pointer-events-auto relative min-w-0 max-w-full overflow-hidden")}>
+      <div
+        ref={scroller}
+        role="toolbar"
+        aria-label="Инструменты"
+        className="flex snap-x items-center overflow-x-auto p-1 [scrollbar-width:none]"
+      >
+        {tools.map((def) => (
+          <div key={def.id} className="flex items-center">
+            <ToolButton
+              def={def}
+              active={tool === def.id}
+              onClick={() => setTool(def.id)}
+              onDoubleClick={
+                def.id === "furniture" || def.id === "rect" ? () => setTool("move") : undefined
+              }
+            />
+            {options[def.id]}
+          </div>
+        ))}
+        {can(map, "edit") && (
+          <>
+            <span className="mx-1 h-7 w-px bg-white/15" />
+            <button
+              type="button"
+              title="Загрузить готовый план (картинка)"
+              aria-label="Загрузить план"
+              onClick={onUploadPlan}
+              className={iconButton}
+            >
+              <ImagePlus />
+            </button>
+            <button
+              type="button"
+              title={
+                snapping ? "Привязка к углам, стенам и сетке 0,5 м: вкл" : "Привязка выключена"
+              }
+              aria-label="Привязка"
+              aria-pressed={snapping}
+              onClick={() => setOptions({ snapping: !snapping })}
+              className={cn(iconButton, snapping && "text-sky-300")}
+            >
+              <Magnet />
+            </button>
+          </>
+        )}
+      </div>
+      {canScrollRight && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-slate-900 from-40% to-transparent lg:hidden"
+        />
       )}
     </div>
   );

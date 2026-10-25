@@ -38,6 +38,14 @@ import {
   TerraDrawRenderMode,
 } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
+import {
+  circleRing,
+  fixtureExtent,
+  fixtureHandles,
+  furnitureShape,
+  rotateFixture,
+  stretchFixture,
+} from "../lib/furniture";
 import { gridCellMeters, gridLineColor, gridLines } from "../lib/grid";
 import { cornersPlacement, notifyView, registerMap } from "../lib/mapView";
 import {
@@ -48,7 +56,14 @@ import {
   shiftOpenings,
   wallHandles,
 } from "../lib/resize";
-import { DOOR_WIDTHS, doorOnWall, metersPerPixel, rectangleRing, snapPoint } from "../lib/snap";
+import {
+  DOOR_WIDTHS,
+  doorOnWall,
+  metersPerPixel,
+  rectangleRing,
+  snapPoint,
+  stretchDoor,
+} from "../lib/snap";
 import { type LayerGroup, useDraft } from "../store";
 
 const STUDIO_PANOS = "studio-panos";
@@ -161,6 +176,15 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
           offset: number;
         } | null;
       }
+    | {
+        kind: "fixture-resize" | "fixture-rotate";
+        id: string;
+        side: number;
+        ring: XY[];
+        origin: XY;
+        latest: XY[] | null;
+      }
+    | { kind: "door"; id: string; end: 0 | 1; line: LonLat[]; latest: LonLat[] | null }
     | null
   >(null);
   const handlesRef = useRef<() => FeatureCollection>(() => EMPTY);
@@ -170,6 +194,7 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
   const doc = useDraft((s) => s.doc);
   const levelId = useDraft((s) => s.levelId);
   const tool = useDraft((s) => s.tool);
+  const furniture = useDraft((s) => s.furniture);
   const selectedId = useDraft((s) => s.selectedId);
   const panoSpot = useDraft((s) => s.panoSpot);
   const hiddenLayers = useDraft((s) => s.hiddenLayers);
@@ -261,6 +286,16 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       });
     };
     map.on("move", onMove);
+
+    const addShape = (ring: LonLat[], name: string) => {
+      const draft = useDraft.getState();
+      const size = fixtureExtent(ring.map((c) => toLocal(draft.doc.venue.anchor, c)));
+      if (size.widthM * size.depthM < 0.01) {
+        draft.setHint("Контур слишком маленький");
+        return;
+      }
+      draft.addFixtureShape(ring as Position[], name);
+    };
 
     map.on("load", () => {
       const collections = toCollections(initial.doc);
@@ -465,8 +500,8 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
         type: "circle",
         source: HANDLES,
         paint: {
-          "circle-radius": 5,
-          "circle-color": "#ffffff",
+          "circle-radius": ["case", ["==", ["get", "role"], "rotate"], 6, 5],
+          "circle-color": ["case", ["==", ["get", "role"], "rotate"], "#2563eb", "#ffffff"],
           "circle-stroke-color": "#2563eb",
           "circle-stroke-width": 2,
         },
@@ -491,7 +526,11 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       draw.on("finish", (id) => {
         const feature = draw.getSnapshotFeature(id);
         if (feature?.geometry.type === "Polygon") {
-          useDraft.getState().addUnit(feature.geometry.coordinates[0] as Position[]);
+          const ring = feature.geometry.coordinates[0] as Position[];
+          const draft = useDraft.getState();
+          if (draft.tool === "furniture" && draft.furniture === "shape-polygon") {
+            addShape(ring as LonLat[], "Многоугольник");
+          } else draft.addUnit(ring);
         } else if (feature?.geometry.type === "LineString") {
           useDraft.getState().addPath(feature.geometry.coordinates as Position[]);
         }
@@ -555,10 +594,101 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
         })),
       });
     };
+    const paintFixture = (id: string, ring: Position[]) => {
+      const collections = toCollections(useDraft.getState().doc);
+      (map.getSource(SOURCE.fixtures) as GeoJSONSource).setData({
+        type: "FeatureCollection",
+        features: collections.fixtures.features.map((feature) =>
+          feature.properties?.id === id
+            ? { ...feature, geometry: { type: "Polygon" as const, coordinates: [ring] } }
+            : feature,
+        ),
+      });
+    };
+    const paintFixtureHandles = (id: string, ring: XY[]) => {
+      const anchor = useDraft.getState().doc.venue.anchor;
+      (map.getSource(HANDLES) as GeoJSONSource | undefined)?.setData({
+        type: "FeatureCollection",
+        features: fixtureHandles(ring).map((h) => ({
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates: fromLocal(anchor, h.at) },
+          properties: { role: h.role, side: h.side, cursor: h.cursor, id },
+        })),
+      });
+    };
+
+    const paintOpening = (id: string, line: Position[]) => {
+      const collections = toCollections(useDraft.getState().doc);
+      (map.getSource(SOURCE.openings) as GeoJSONSource).setData({
+        type: "FeatureCollection",
+        features: collections.openings.features.map((feature) =>
+          feature.properties?.id === id
+            ? { ...feature, geometry: { type: "LineString" as const, coordinates: line } }
+            : feature,
+        ),
+      });
+    };
+    const paintDoorHandles = (id: string, line: LonLat[]) => {
+      const anchor = useDraft.getState().doc.venue.anchor;
+      const a = toLocal(anchor, line[0] as LonLat);
+      const b = toLocal(anchor, line[line.length - 1] as LonLat);
+      const cursor = Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]) ? "ew-resize" : "ns-resize";
+      (map.getSource(HANDLES) as GeoJSONSource | undefined)?.setData({
+        type: "FeatureCollection",
+        features: ([0, 1] as const).map((end) => ({
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates: line[end] as LonLat },
+          properties: { role: "door", side: end, cursor, id },
+        })),
+      });
+    };
 
     const moveDrag = (lngLat: { lng: number; lat: number }) => {
       const drag = dragging.current;
       if (!drag) return;
+      if (drag.kind === "door") {
+        const s = useDraft.getState();
+        const next = stretchDoor(s.doc, s.levelId, drag.line, drag.end, [lngLat.lng, lngLat.lat]);
+        if (!next) return;
+        const anchor = s.doc.venue.anchor;
+        const moved = next.some((p, i) => {
+          const origin = drag.line[i];
+          if (!origin) return true;
+          const a = toLocal(anchor, p);
+          const b = toLocal(anchor, origin);
+          return Math.hypot(a[0] - b[0], a[1] - b[1]) > 0.02;
+        });
+        drag.latest = moved ? next : null;
+        const line = drag.latest ?? drag.line;
+        paintOpening(drag.id, line);
+        paintDoorHandles(drag.id, line);
+        return;
+      }
+      if (drag.kind === "fixture-resize" || drag.kind === "fixture-rotate") {
+        const anchor = useDraft.getState().doc.venue.anchor;
+        const pointer = toLocal(anchor, [lngLat.lng, lngLat.lat]);
+        const grip = fixtureHandles(drag.ring).find(
+          (h) => h.role === "resize" && h.side === drag.side,
+        );
+        const pulled: XY = grip
+          ? [grip.at[0] + pointer[0] - drag.origin[0], grip.at[1] + pointer[1] - drag.origin[1]]
+          : pointer;
+        const next =
+          drag.kind === "fixture-resize"
+            ? stretchFixture(drag.ring, drag.side, pulled)
+            : rotateFixture(drag.ring, drag.origin, pointer);
+        if (!next) return;
+        const moved = next.some((p, i) => {
+          const origin = drag.ring[i];
+          return !origin || Math.hypot(p[0] - origin[0], p[1] - origin[1]) > 0.02;
+        });
+        drag.latest = moved ? next : null;
+        const ring = (drag.latest ?? drag.ring).map((p) => fromLocal(anchor, p));
+        paintFixture(drag.id, ring);
+        paintFixtureHandles(drag.id, drag.latest ?? drag.ring);
+        if (drag.kind === "fixture-rotate") map.getCanvas().style.cursor = "grabbing";
+        return;
+      }
       if (drag.kind === "wall") {
         const s = useDraft.getState();
         const anchor = s.doc.venue.anchor;
@@ -674,17 +804,48 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
         const nudged = start ? Math.hypot(end.x - start.x, end.y - start.y) < 6 : false;
         if (!nudged) useDraft.getState().updatePoi(drag.id, { position: at });
       } else if (drag.kind === "pano") props.current.onMovePano(drag.id, at);
-      else if (drag.kind === "fixture") {
-        const dx = lngLat.lng - drag.origin[0];
-        const dy = lngLat.lat - drag.origin[1];
-        useDraft.getState().updateFixture(drag.id, {
-          geometry: {
-            type: "Polygon",
-            coordinates: drag.rings.map((ring) =>
-              ring.map(([lon, lat]) => [lon + dx, lat + dy] as Position),
-            ),
-          },
-        });
+      else if (drag.kind === "door") {
+        if (drag.latest) {
+          useDraft.getState().updateOpening(drag.id, {
+            geometry: { type: "LineString", coordinates: drag.latest },
+          });
+        } else {
+          const collections = toCollections(useDraft.getState().doc);
+          (map.getSource(SOURCE.openings) as GeoJSONSource).setData(collections.openings);
+          (map.getSource(HANDLES) as GeoJSONSource | undefined)?.setData(handlesRef.current());
+        }
+      } else if (drag.kind === "fixture-resize" || drag.kind === "fixture-rotate") {
+        const anchor = useDraft.getState().doc.venue.anchor;
+        if (drag.latest) {
+          useDraft.getState().updateFixture(drag.id, {
+            geometry: {
+              type: "Polygon",
+              coordinates: [drag.latest.map((p) => fromLocal(anchor, p))],
+            },
+          });
+        } else {
+          const collections = toCollections(useDraft.getState().doc);
+          (map.getSource(SOURCE.fixtures) as GeoJSONSource).setData(collections.fixtures);
+          (map.getSource(HANDLES) as GeoJSONSource | undefined)?.setData(handlesRef.current());
+        }
+      } else if (drag.kind === "fixture") {
+        const start = map.project(drag.origin);
+        const end = map.project(at);
+        if (Math.hypot(end.x - start.x, end.y - start.y) < 6) {
+          const collections = toCollections(useDraft.getState().doc);
+          (map.getSource(SOURCE.fixtures) as GeoJSONSource).setData(collections.fixtures);
+        } else {
+          const dx = lngLat.lng - drag.origin[0];
+          const dy = lngLat.lat - drag.origin[1];
+          useDraft.getState().updateFixture(drag.id, {
+            geometry: {
+              type: "Polygon",
+              coordinates: drag.rings.map((ring) =>
+                ring.map(([lon, lat]) => [lon + dx, lat + dy] as Position),
+              ),
+            },
+          });
+        }
       } else if (drag.kind === "wall" || drag.kind === "corner" || drag.kind === "room") {
         const latest = drag.latest;
         if (latest && Math.abs(latest.offset) >= 0.02) {
@@ -812,16 +973,28 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
           map.getCanvas().style.cursor = "";
         }
       }
-      if (s.tool === "rect" || s.tool === "stairs" || s.tool === "room") {
+      const shape = furnitureShape(s.furniture);
+      const drawingShape =
+        s.tool === "furniture" && (shape === "shape-square" || shape === "shape-circle");
+      if (s.tool === "rect" || s.tool === "stairs" || s.tool === "room" || drawingShape) {
         const snapped = snap(event.lngLat);
         const features = [point(snapped.position, snapped.kind)];
-        if (s.tool === "rect" && rectStart.current) {
+        if (rectStart.current && (s.tool === "rect" || shape === "shape-square")) {
           const ring = rectangleRing(s.doc, rectStart.current, snapped.position, planRotation());
           features.push({
             type: "Feature",
             geometry: { type: "Polygon", coordinates: [ring] },
             properties: {},
           });
+        } else if (rectStart.current && shape === "shape-circle") {
+          const ring = circleRing(s.doc.venue.anchor, rectStart.current, snapped.position);
+          if (ring) {
+            features.push({
+              type: "Feature",
+              geometry: { type: "Polygon", coordinates: [ring] },
+              properties: {},
+            });
+          }
         }
         setPreview(features);
       } else if (s.tool === "door") {
@@ -874,11 +1047,41 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
           return;
         }
         case "furniture": {
-          // A tap on a piece already there selects it; a double tap switches to moving it.
+          // A tap on a piece already there selects it so its corners and sides can be pulled.
           const hit = map.queryRenderedFeatures(event.point, { layers: ["fixtures-fill"] })[0];
           const fixtureId = hit?.properties?.id as string | undefined;
-          if (fixtureId) s.select(fixtureId);
-          else s.addFurniture(at, planRotation());
+          if (fixtureId) {
+            rectStart.current = null;
+            setPreview([]);
+            s.setHint(null);
+            s.select(fixtureId);
+            s.setTool("select");
+            return;
+          }
+          const shape = furnitureShape(s.furniture);
+          if (shape === "shape-polygon") return;
+          if (shape === "shape-square" || shape === "shape-circle") {
+            const snapped = snap(event.lngLat).position;
+            if (!rectStart.current) {
+              rectStart.current = snapped;
+              s.setHint(
+                shape === "shape-circle"
+                  ? "Второй клик — край круга. Esc — отмена"
+                  : "Второй клик — противоположный угол. Esc — отмена",
+              );
+            } else {
+              const ring =
+                shape === "shape-circle"
+                  ? circleRing(s.doc.venue.anchor, rectStart.current, snapped)
+                  : rectangleRing(s.doc, rectStart.current, snapped, planRotation());
+              rectStart.current = null;
+              setPreview([]);
+              s.setHint(null);
+              if (ring) addShape(ring, shape === "shape-circle" ? "Круг" : "Квадрат");
+            }
+            return;
+          }
+          s.addFurniture(at, planRotation());
           return;
         }
         case "move": {
@@ -970,7 +1173,72 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
     map.on("mousedown", "pois-hit", startDrag("poi"));
     map.on("mousedown", "studio-panos-hit", startDrag("pano"));
     map.on("mousedown", "fixtures-fill", startDrag("fixture"));
+    const startFixtureGesture = (
+      role: "resize" | "rotate",
+      side: number,
+      lngLat: { lng: number; lat: number },
+      preventDefault: () => void,
+    ) => {
+      const s = useDraft.getState();
+      if (s.tool !== "select" || !props.current.canEdit) return;
+      const fixture = s.doc.fixtures?.find((f) => f.id === s.selectedId && f.levelId === s.levelId);
+      const ringLon = fixture?.geometry.coordinates[0];
+      if (!fixture || !ringLon) return;
+      preventDefault();
+      const anchor = s.doc.venue.anchor;
+      dragging.current = {
+        kind: role === "resize" ? "fixture-resize" : "fixture-rotate",
+        id: fixture.id,
+        side,
+        ring: ringLon.map((c) => toLocal(anchor, c as LonLat)),
+        origin: toLocal(anchor, [lngLat.lng, lngLat.lat]),
+        latest: null,
+      };
+      map.dragPan.disable();
+      map.getCanvas().style.cursor = role === "rotate" ? "grabbing" : "ew-resize";
+    };
+    const nearerDoorEnd = (point: { x: number; y: number }, line: LonLat[]): 0 | 1 | null => {
+      const p0 = map.project(line[0] as LonLat);
+      const p1 = map.project(line[line.length - 1] as LonLat);
+      const d0 = Math.hypot(point.x - p0.x, point.y - p0.y);
+      const d1 = Math.hypot(point.x - p1.x, point.y - p1.y);
+      const span = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+      const dist = Math.min(d0, d1);
+      if (span >= 28 && dist > Math.max(16, span * 0.3)) return null;
+      return d0 <= d1 ? 0 : 1;
+    };
+    const startDoorStretch = (end: 0 | 1, preventDefault: () => void) => {
+      const s = useDraft.getState();
+      if (s.tool !== "select" || !props.current.canEdit) return;
+      const opening = s.doc.openings?.find((o) => o.id === s.selectedId && o.levelId === s.levelId);
+      const line = opening?.geometry.coordinates;
+      if (!opening || !line || line.length < 2) return;
+      preventDefault();
+      dragging.current = {
+        kind: "door",
+        id: opening.id,
+        end,
+        line: line as LonLat[],
+        latest: null,
+      };
+      map.dragPan.disable();
+      map.getCanvas().style.cursor = "ew-resize";
+    };
     map.on("mousedown", "wall-handles-hit", (event) => {
+      const role = String(event.features?.[0]?.properties?.role ?? "");
+      if (role === "door") {
+        const end = Number(event.features?.[0]?.properties?.side);
+        if (end === 0 || end === 1) {
+          startDoorStretch(end, () => event.preventDefault());
+        }
+        return;
+      }
+      if (role === "resize" || role === "rotate") {
+        startFixtureGesture(role, Number(event.features?.[0]?.properties?.side), event.lngLat, () =>
+          event.preventDefault(),
+        );
+        return;
+      }
       const corner = cornerUnder(event.lngLat);
       if (corner) {
         startCornerDrag(corner.corner, corner.cursor, () => event.preventDefault());
@@ -980,6 +1248,17 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
       const cursor = String(event.features?.[0]?.properties?.cursor ?? "ew-resize");
       if (!Number.isInteger(edge)) return;
       startWallDrag(edge, cursor, () => event.preventDefault());
+    });
+    map.on("mousedown", "selected-opening", (event) => {
+      if (dragging.current || useDraft.getState().tool !== "select") return;
+      const opening = useDraft
+        .getState()
+        .doc.openings?.find((o) => o.id === useDraft.getState().selectedId);
+      const line = opening?.geometry.coordinates as LonLat[] | undefined;
+      if (!line) return;
+      const end = nearerDoorEnd(event.point, line);
+      if (end === null) return;
+      startDoorStretch(end, () => event.preventDefault());
     });
     map.on("mousedown", (event) => {
       if (dragging.current || !props.current.canEdit) return;
@@ -1008,6 +1287,20 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
         }
         if (map.getLayer("wall-handles-hit")) {
           const hit = map.queryRenderedFeatures(event.point, { layers: ["wall-handles-hit"] })[0];
+          const role = String(hit?.properties?.role ?? "");
+          if (role === "door") {
+            const end = Number(hit?.properties?.side);
+            if (end === 0 || end === 1) {
+              startDoorStretch(end, () => event.preventDefault());
+            }
+            return;
+          }
+          if (role === "resize" || role === "rotate") {
+            startFixtureGesture(role, Number(hit?.properties?.side), event.lngLat, () =>
+              event.preventDefault(),
+            );
+            return;
+          }
           const edge = Number(hit?.properties?.edge);
           if (hit && Number.isInteger(edge)) {
             startWallDrag(edge, String(hit.properties?.cursor ?? "ew-resize"), () =>
@@ -1040,19 +1333,30 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
     });
     map.on("touchmove", (event) => {
       const kind = dragging.current?.kind;
-      if (kind !== "fixture" && kind !== "wall" && kind !== "corner" && kind !== "room") return;
+      if (
+        kind !== "fixture" &&
+        kind !== "fixture-resize" &&
+        kind !== "fixture-rotate" &&
+        kind !== "door" &&
+        kind !== "wall" &&
+        kind !== "corner" &&
+        kind !== "room"
+      ) {
+        return;
+      }
       event.preventDefault();
       moveDrag(event.lngLat);
     });
     map.on("dblclick", (event) => {
       if (!props.current.canEdit) return;
-      const layers = ["fixtures-fill", "units-fill"].filter((l) => map.getLayer(l));
+      const layers = ["fixtures-fill", "units-fill", "pois-hit"].filter((l) => map.getLayer(l));
       const hit = layers.length ? map.queryRenderedFeatures(event.point, { layers })[0] : undefined;
       const id = hit?.properties?.id as string | undefined;
       if (!id) return;
       event.preventDefault();
       const s = useDraft.getState();
-      s.setTool("move");
+      // The same double click that starts moving also returns to the cursor.
+      s.setTool(s.tool === "move" ? "select" : "move");
       s.select(id);
       ignoreClicksUntil = performance.now() + 300;
     });
@@ -1076,7 +1380,16 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
     });
     map.on("zoomend", () => {
       const kind = dragging.current?.kind;
-      if (kind === "wall" || kind === "corner" || kind === "room") return;
+      if (
+        kind === "wall" ||
+        kind === "corner" ||
+        kind === "room" ||
+        kind === "fixture-resize" ||
+        kind === "fixture-rotate" ||
+        kind === "door"
+      ) {
+        return;
+      }
       (map.getSource(HANDLES) as GeoJSONSource | undefined)?.setData(handlesRef.current());
     });
     for (const layer of ["pois-hit", "studio-panos-hit", "fixtures-fill"]) {
@@ -1187,14 +1500,16 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
     const map = mapRef.current;
     rectStart.current = null;
     (map?.getSource(PREVIEW) as GeoJSONSource | undefined)?.setData(EMPTY);
+    const drawingOutline =
+      tool === "room" || (tool === "furniture" && furniture === "shape-polygon");
     drawRef.current?.setMode(
-      tool === "room" ? "polygon" : tool === "path" ? "linestring" : "static",
+      drawingOutline ? "polygon" : tool === "path" ? "linestring" : "static",
     );
     const canvas = map?.getCanvas();
     if (canvas) {
       canvas.style.cursor = tool === "select" ? "" : tool === "move" ? "move" : "crosshair";
     }
-  }, [tool]);
+  }, [tool, furniture]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1217,18 +1532,45 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
     const map = mapRef.current;
     const s = useDraft.getState();
     if (!map || s.tool !== "select" || !props.current.canEdit) return EMPTY;
-    const unit = s.doc.units?.find((u) => u.id === s.selectedId && u.levelId === s.levelId);
-    const ringLon = unit?.geometry.coordinates[0];
-    if (!unit || !ringLon) return EMPTY;
     const anchor = s.doc.venue.anchor;
-    const ring = ringLon.map((c) => toLocal(anchor, c as LonLat));
-    const minM = metersPerPixel(map.getCenter().lat, map.getZoom()) * 28;
+    const unit = s.doc.units?.find((u) => u.id === s.selectedId && u.levelId === s.levelId);
+    const unitRing = unit?.geometry.coordinates[0];
+    if (unit && unitRing) {
+      const ring = unitRing.map((c) => toLocal(anchor, c as LonLat));
+      const minM = metersPerPixel(map.getCenter().lat, map.getZoom()) * 28;
+      return {
+        type: "FeatureCollection",
+        features: wallHandles(ring, minM).map((h) => ({
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates: fromLocal(anchor, h.at) },
+          properties: { edge: h.edge, cursor: h.cursor, id: unit.id },
+        })),
+      };
+    }
+    const fixture = s.doc.fixtures?.find((f) => f.id === s.selectedId && f.levelId === s.levelId);
+    const fixtureRing = fixture?.geometry.coordinates[0];
+    if (fixture && fixtureRing) {
+      return {
+        type: "FeatureCollection",
+        features: fixtureHandles(fixtureRing.map((c) => toLocal(anchor, c as LonLat))).map((h) => ({
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates: fromLocal(anchor, h.at) },
+          properties: { role: h.role, side: h.side, cursor: h.cursor, id: fixture.id },
+        })),
+      };
+    }
+    const opening = s.doc.openings?.find((o) => o.id === s.selectedId && o.levelId === s.levelId);
+    const doorLine = opening?.geometry.coordinates;
+    if (!opening || !doorLine || doorLine.length < 2) return EMPTY;
+    const a = toLocal(anchor, doorLine[0] as LonLat);
+    const b = toLocal(anchor, doorLine[doorLine.length - 1] as LonLat);
+    const cursor = Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]) ? "ew-resize" : "ns-resize";
     return {
       type: "FeatureCollection",
-      features: wallHandles(ring, minM).map((h) => ({
+      features: [0, doorLine.length - 1].map((end) => ({
         type: "Feature" as const,
-        geometry: { type: "Point" as const, coordinates: fromLocal(anchor, h.at) },
-        properties: { edge: h.edge, cursor: h.cursor, id: unit.id },
+        geometry: { type: "Point" as const, coordinates: doorLine[end] as LonLat },
+        properties: { role: "door", side: end, cursor, id: opening.id },
       })),
     };
   };
@@ -1239,12 +1581,23 @@ export function EditorMap({ panos, canEdit, onMovePano }: Props) {
     if (!map) return;
     const show =
       tool === "select" &&
-      doc.units?.some((u) => u.id === selectedId && u.levelId === levelId) === true;
+      (doc.units?.some((u) => u.id === selectedId && u.levelId === levelId) === true ||
+        doc.fixtures?.some((f) => f.id === selectedId && f.levelId === levelId) === true ||
+        doc.openings?.some((o) => o.id === selectedId && o.levelId === levelId) === true);
     return runWhenMapReady(map, () => {
       const source = map.getSource(HANDLES) as GeoJSONSource | undefined;
       if (!source) return false;
       const kind = dragging.current?.kind;
-      if (kind === "wall" || kind === "corner" || kind === "room") return true;
+      if (
+        kind === "wall" ||
+        kind === "corner" ||
+        kind === "room" ||
+        kind === "fixture-resize" ||
+        kind === "fixture-rotate" ||
+        kind === "door"
+      ) {
+        return true;
+      }
       source.setData(show ? handlesRef.current() : EMPTY);
       return true;
     });

@@ -2,13 +2,16 @@ import type { PanoramaOut } from "@ttkpr/api-client";
 import {
   buildNavGraph,
   CONNECTOR_LABELS,
+  FIXTURE_COLORS,
   findTourRoute,
   formatDistance,
   formatDuration,
+  fromLocal,
   labelPoint,
   POI_CATEGORIES,
   plural,
   sortedLevels,
+  toLocal,
   UNIT_COLORS,
   unitSize,
 } from "@ttkpr/map-core";
@@ -24,10 +27,12 @@ import {
 } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useMemo, useRef, useState } from "react";
 import { detectRooms, placeRing } from "../lib/autoPlan";
+import { fixtureExtent, resizeFixture } from "../lib/furniture";
 import { mapLink } from "../lib/links";
 import { cornersPlacement, placementCorners, viewCenter } from "../lib/mapView";
 import { usePanoramaActions } from "../lib/panos";
 import { scalePoint } from "../lib/scalePlan";
+import { doorLength, resizeDoor } from "../lib/snap";
 import { useDraft } from "../store";
 import { CaptureQrDialog } from "./CaptureQrDialog";
 import { ChatInbox } from "./ChatInbox";
@@ -130,13 +135,8 @@ export function Inspector({
         <DeleteButton id={path.id} />
       </Section>
     );
-  } else if (opening) {
-    content = (
-      <Section title="Дверь / проход">
-        <DeleteButton id={opening.id} />
-      </Section>
-    );
-  } else content = <OverviewPanel panos={panos} mapId={mapId} canEdit={canEdit} />;
+  } else if (opening) content = <OpeningPanel id={opening.id} />;
+  else content = <OverviewPanel panos={panos} mapId={mapId} canEdit={canEdit} />;
 
   // Roles without the edit right see the same panels, read-only (panoramas manage themselves).
   return (
@@ -197,7 +197,7 @@ function DeleteButton({ id, duplicable = false }: { id: string; duplicable?: boo
         <Button
           variant="secondary"
           className="flex-1"
-          title="Ctrl+D"
+          title="Ctrl+C, затем Ctrl+V"
           onClick={() => useDraft.getState().duplicate(id)}
         >
           Дублировать
@@ -323,9 +323,20 @@ function RoomSize({
 }
 
 function FixturePanel({ id }: { id: string }) {
-  const fixture = useDraft((s) => s.doc.fixtures?.find((f) => f.id === id));
+  const doc = useDraft((s) => s.doc);
+  const fixture = doc.fixtures?.find((f) => f.id === id);
   const { updateFixture } = useDraft.getState();
   if (!fixture) return null;
+  const anchor = doc.venue.anchor;
+  const local = (fixture.geometry.coordinates[0] ?? []).map((c) =>
+    toLocal(anchor, c as [number, number]),
+  );
+  const size = fixtureExtent(local);
+  const applySize = (widthM: number, depthM: number) => {
+    const ring = resizeFixture(local, widthM, depthM).map((p) => fromLocal(anchor, p));
+    updateFixture(fixture.id, { geometry: { type: "Polygon", coordinates: [ring] } });
+  };
+  const color = fixture.color ?? FIXTURE_COLORS[fixture.kind] ?? "#e5e7eb";
   return (
     <Section title="Мебель">
       <Field label="Название" htmlFor="fixture-name">
@@ -335,6 +346,49 @@ function FixturePanel({ id }: { id: string }) {
           value={fixture.name ?? ""}
           placeholder="Без подписи на плане"
           onChange={(e) => updateFixture(fixture.id, { name: e.target.value || null })}
+        />
+      </Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Ширина, м" htmlFor="fixture-w">
+          <input
+            id="fixture-w"
+            key={`${fixture.id}-w-${size.widthM.toFixed(2)}`}
+            className={field}
+            inputMode="decimal"
+            defaultValue={size.widthM.toFixed(2)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
+            onBlur={(e) => {
+              const widthM = Number(e.target.value.replace(",", "."));
+              if (widthM >= 0.3) applySize(widthM, size.depthM);
+            }}
+          />
+        </Field>
+        <Field label="Глубина, м" htmlFor="fixture-d">
+          <input
+            id="fixture-d"
+            key={`${fixture.id}-d-${size.depthM.toFixed(2)}`}
+            className={field}
+            inputMode="decimal"
+            defaultValue={size.depthM.toFixed(2)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
+            onBlur={(e) => {
+              const depthM = Number(e.target.value.replace(",", "."));
+              if (depthM >= 0.3) applySize(size.widthM, depthM);
+            }}
+          />
+        </Field>
+      </div>
+      <Field label="Цвет" htmlFor="fixture-color">
+        <input
+          id="fixture-color"
+          type="color"
+          value={color}
+          className="h-11 w-full cursor-pointer rounded-xl border border-border bg-bg px-2"
+          onChange={(e) => updateFixture(fixture.id, { color: e.target.value })}
         />
       </Field>
       <p className="text-xs text-muted">
@@ -721,6 +775,41 @@ function OverviewPanel({
         </ol>
       </Section>
     </div>
+  );
+}
+
+function OpeningPanel({ id }: { id: string }) {
+  const doc = useDraft((s) => s.doc);
+  const opening = doc.openings?.find((o) => o.id === id);
+  const { updateOpening } = useDraft.getState();
+  if (!opening) return null;
+  const line = opening.geometry.coordinates as [number, number][];
+  const lengthM = doorLength(doc.venue.anchor, line);
+  return (
+    <Section title="Дверь / проход">
+      <Field label="Длина, м" htmlFor="opening-length">
+        <input
+          id="opening-length"
+          key={`${opening.id}-${lengthM.toFixed(2)}`}
+          className={field}
+          inputMode="decimal"
+          defaultValue={lengthM.toFixed(2)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
+          onBlur={(e) => {
+            const next = Number(e.target.value.replace(",", "."));
+            if (next < 0.3) return;
+            const resized = resizeDoor(doc, opening.levelId, line, next);
+            if (!resized) return;
+            updateOpening(opening.id, {
+              geometry: { type: "LineString", coordinates: resized },
+            });
+          }}
+        />
+      </Field>
+      <DeleteButton id={opening.id} />
+    </Section>
   );
 }
 
