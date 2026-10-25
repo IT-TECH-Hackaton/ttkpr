@@ -66,18 +66,10 @@ export function OfflineControl({ slug, version }: Props) {
           disabled={!online}
           onClick={() => save.mutate()}
         >
-          ⬇ Сохранить карту офлайн
+          Сохранить карту офлайн
         </Button>
-        <p className="text-xs text-muted">
-          {online
-            ? "План, точки и панорамы будут открываться без интернета."
-            : "Нет сети — сохранить можно, когда появится интернет."}
-        </p>
-        {save.error && (
-          <p className="text-sm text-danger">
-            Не удалось сохранить: проверьте интернет и место на телефоне.
-          </p>
-        )}
+        {!online && <p className="text-xs text-muted">Нет сети</p>}
+        {save.error && <p className="text-sm text-danger">Не удалось сохранить</p>}
       </div>
     );
   }
@@ -85,7 +77,7 @@ export function OfflineControl({ slug, version }: Props) {
   return (
     <div className="space-y-2 rounded-2xl bg-surface p-3">
       <p className="text-sm">
-        ✓ Доступна без интернета · {formatBytes(record.bytes)}
+        Сохранена · {formatBytes(record.bytes)}
         {record.panoramas > 0 &&
           ` · ${plural(record.panoramas, ["панорама", "панорамы", "панорам"])}`}
       </p>

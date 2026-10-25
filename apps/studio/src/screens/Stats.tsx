@@ -126,10 +126,6 @@ export function StatsScreen({ mapId }: { mapId: string }) {
                 tone="warn"
               />
             </div>
-            <p className="text-sm text-muted">
-              Счётчики анонимные: без входа, без адресов и идентификаторов посетителей. Обновляются
-              раз в минуту.
-            </p>
           </>
         )}
       </div>

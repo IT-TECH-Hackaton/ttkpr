@@ -109,8 +109,7 @@ export function Landing() {
           )}
           {saved.data?.length === 0 && (
             <p className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted">
-              Здесь появятся карты, которые вы сохраните кнопкой «Сохранить офлайн», — они работают
-              без интернета.
+              Сохранённых карт пока нет
             </p>
           )}
           <ul className="grid gap-2 sm:grid-cols-2">

@@ -125,21 +125,13 @@ export function Inspector({
   else if (path) {
     content = (
       <Section title="Дорожка">
-        <p className="text-sm text-muted">
-          {Math.round(lineLength(path.geometry.coordinates))} м. По дорожке пройдут маршруты: её
-          концы у входов ведут внутрь зданий, изгибы внутри помещений соединяются с ними.
-        </p>
+        <p className="text-sm text-muted">{Math.round(lineLength(path.geometry.coordinates))} м</p>
         <DeleteButton id={path.id} />
       </Section>
     );
   } else if (opening) {
     content = (
       <Section title="Дверь / проход">
-        <p className="text-sm text-muted">
-          {opening.category === "window"
-            ? "Окно: видно на плане и в 3D, маршруты через него не идут."
-            : `${opening.category === "entrance" ? "Вход в здание" : "Соединяет соседние помещения"} — по ней пройдут маршруты.`}
-        </p>
         <DeleteButton id={opening.id} />
       </Section>
     );
@@ -190,8 +182,7 @@ function ConnectorPanel({ id }: { id: string }) {
         </select>
       </Field>
       <p className="text-sm text-muted">
-        Соединяет: {connector.points.map((p) => levelName(p.levelId)).join(" ↔ ")}. Для маршрутов
-        «без ступенек» используются только лифты и пандусы.
+        {connector.points.map((p) => levelName(p.levelId)).join(" ↔ ")}
       </p>
       <DeleteButton id={connector.id} />
     </Section>
@@ -334,8 +325,7 @@ function FixturePanel({ id }: { id: string }) {
         />
       </Field>
       <p className="text-xs text-muted">
-        {fixture.obstacle === false ? "Маршруты проходят рядом." : "Маршруты обходят его стороной."}{" "}
-        На плане подпись не показывается.
+        {fixture.obstacle === false ? "Не мешает проходу" : "Маршруты обходят"}
       </p>
       <DeleteButton id={fixture.id} />
     </Section>
@@ -592,9 +582,8 @@ function PanoSpotPanel({ mapId, spot }: { mapId: string; spot: [number, number] 
 
   return (
     <Section title="Новая панорама">
-      <p className="text-sm text-muted">Точка съёмки отмечена на плане. Как получить панораму?</p>
       <Button className="w-full" onClick={() => setQr(true)}>
-        📱 Снять с телефона
+        Снять с телефона
       </Button>
       <Button variant="secondary" className="w-full" onClick={() => fileRef.current?.click()}>
         Загрузить готовую 360° (2:1)
@@ -742,10 +731,6 @@ function ToursSection() {
   const { addTour, select } = useDraft.getState();
   return (
     <Section title="Маршруты для гостей">
-      <p className="text-sm text-muted">
-        Экскурсия, обход стендов, путь от входа до зала — гости откроют его по ссылке или QR и
-        пройдут по плану и панорамам.
-      </p>
       {tours.length > 0 && (
         <ul className="divide-y divide-border rounded-xl border border-border text-sm">
           {tours.map((tour) => (

@@ -135,10 +135,6 @@ export function ProfileScreen() {
         </Card>
 
         <Card title="Безопасность">
-          <p className="text-sm text-muted">
-            Потеряли телефон или входили с чужого компьютера? Завершите все сеансы — везде, включая
-            это устройство, потребуется войти заново.
-          </p>
           <Button
             variant="secondary"
             className="text-danger"
@@ -150,9 +146,6 @@ export function ProfileScreen() {
         </Card>
 
         <Card title="Роли на картах">
-          <p className="text-sm text-muted">
-            Роль задаётся на каждой карте отдельно — в разделе «Команда».
-          </p>
           <ul className="divide-y divide-border">
             {Object.entries(ROLE_LABELS).map(([role, label]) => (
               <li key={role} className="flex gap-4 py-2 text-sm">

@@ -44,3 +44,20 @@
   background: rgb(220 38 38 / 0.95);
   color: #ffffff;
 }
+
+/* "Где что" in the legend: the control it points at pulses for a moment. */
+@keyframes faq-spot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(37 99 235 / 0);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgb(37 99 235 / 0.55);
+  }
+}
+.faq-spot {
+  position: relative;
+  z-index: 40;
+  animation: faq-spot 0.8s ease-in-out 4;
+  border-radius: 1rem;
+}

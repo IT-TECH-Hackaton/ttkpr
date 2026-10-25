@@ -91,7 +91,7 @@ function markersFor(bundle: MapBundle, pano: Pano, overlay?: RouteOverlay): Mark
       position: { yaw: toRad(target.yaw), pitch: toRad(target.pitch) },
       html:
         target.kind === "poi"
-          ? `<span class="pano-marker${dest ? " pano-marker--dest" : ""}">${dest ? "🏁 " : ""}${escapeHtml(target.label)}</span>`
+          ? `<span class="pano-marker${dest ? " pano-marker--dest" : ""}">${escapeHtml(target.label)}</span>`
           : `<span class="pano-marker pano-marker--link${next ? " pano-marker--next" : ""}">↑ ${next ? "Дальше по маршруту" : escapeHtml(target.label)}</span>`,
       anchor: "center center",
       zIndex: next || dest ? 10 : 1,

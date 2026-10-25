@@ -15,4 +15,9 @@ test("shows the intro once, then the legend on demand", async ({ page }) => {
   await expect(page.getByRole("dialog")).toBeHidden();
   await page.getByRole("button", { name: "Обозначения на карте" }).click();
   await expect(legend).toBeVisible();
+
+  // "Где что": "Показать" closes the help and lights up the search field.
+  await page.getByRole("button", { name: "Показать" }).first().click();
+  await expect(legend).toBeHidden();
+  await expect(page.getByLabel("Поиск по карте")).toHaveClass(/faq-spot/);
 });

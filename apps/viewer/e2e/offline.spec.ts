@@ -15,7 +15,7 @@ test("a saved map opens without internet, panoramas included", async ({ page, co
   });
 
   await page.getByRole("button", { name: /Сохранить карту офлайн/ }).click();
-  await expect(page.getByText(/Доступна без интернета/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Сохранена ·/)).toBeVisible({ timeout: 30_000 });
 
   await context.setOffline(true);
   await page.reload();

@@ -67,10 +67,7 @@ export function PlanImportDialog({ mapId, onClose }: { mapId: string; onClose: (
           <h2 id={titleId} className="text-lg font-semibold">
             Распознать план здания
           </h2>
-          <p className="text-sm text-muted">
-            PDF (каждая страница — этаж) или картинка. Найдём помещения, двери, окна, лестницы,
-            лифты и подписи — проверьте черновик и поправьте, если нужно.
-          </p>
+          <p className="text-sm text-muted">PDF (страница — этаж) или картинка</p>
         </div>
 
         {!job && (

@@ -94,11 +94,6 @@ export function ChatPanel({ slug, onClose }: { slug: string; onClose: () => void
           </Button>
         </div>
         <div className="min-h-24 flex-1 space-y-2 overflow-y-auto" aria-live="polite">
-          {messages.length === 0 && (
-            <p className="text-sm text-muted">
-              Спросите, где найти нужное место или во сколько начало. Ответ придёт сюда же.
-            </p>
-          )}
           {messages.map((m) => (
             <p
               key={m.id}
