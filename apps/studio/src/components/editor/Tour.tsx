@@ -343,18 +343,18 @@ export function StudioTour({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** Whether this device has not seen the tour yet. */
-export function tourPending(): boolean {
+/** Whether this organizer has not seen the tour on this device (each account gets it once). */
+export function tourPending(userId: string): boolean {
   try {
-    return localStorage.getItem(TOUR_KEY) === null;
+    return localStorage.getItem(`${TOUR_KEY}.${userId}`) === null;
   } catch {
     return false;
   }
 }
 
-export function markTourSeen(): void {
+export function markTourSeen(userId: string): void {
   try {
-    localStorage.setItem(TOUR_KEY, "done");
+    localStorage.setItem(`${TOUR_KEY}.${userId}`, "done");
   } catch {
     // Private mode: the tour comes back next time, nothing worse.
   }

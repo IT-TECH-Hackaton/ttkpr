@@ -30,6 +30,7 @@ import {
 import { localMapLink, mapLink } from "../lib/links";
 import { usePanoramaActions, usePanoramas } from "../lib/panos";
 import { can } from "../lib/permissions";
+import { useMe } from "../lib/session";
 import { useUploadPlan } from "../lib/uploadPlan";
 import { useDraft } from "../store";
 
@@ -143,10 +144,14 @@ function EditorLayout(props: LayoutProps) {
   const { undo, redo } = useStore(useDraft.temporal);
   const [help, setHelp] = useState(false);
   // The tour starts by itself the first time this device opens the editor.
-  const [tour, setTour] = useState(tourPending);
+  const userId = useMe().data?.id;
+  const [tour, setTour] = useState(false);
+  useEffect(() => {
+    if (userId && tourPending(userId)) setTour(true);
+  }, [userId]);
   const closeTour = () => {
     setTour(false);
-    markTourSeen();
+    if (userId) markTourSeen(userId);
   };
   const [inspectorOpen, setInspectorOpen] = useState(
     () => window.matchMedia("(min-width: 768px)").matches,
